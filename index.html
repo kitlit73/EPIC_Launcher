@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EPIC Launcher — Minecraft Launcher</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛏️</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- ===== Фон: параллакс мир Minecraft ===== -->
+  <div class="scene" aria-hidden="true">
+    <div class="sky"></div>
+    <div class="sun"></div>
+    <div class="clouds clouds--far"></div>
+    <div class="clouds clouds--near"></div>
+    <div class="hills hills--back"></div>
+    <div class="hills hills--front"></div>
+    <div class="ground"></div>
+    <div class="particles" id="particles"></div>
+    <div class="vignette"></div>
+  </div>
+
+  <div class="app">
+    <!-- ===== Боковая панель ===== -->
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo__block logo__block--grass"></div>
+        <div class="logo__text">
+          <span class="logo__title">EPIC</span>
+          <span class="logo__sub">LAUNCHER</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button class="nav__item is-active" data-page="home">
+          <svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3z"/></svg>
+          <span>Главная</span>
+        </button>
+        <button class="nav__item" data-page="skins">
+          <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 110 10 5 5 0 010-10zm0 12c5 0 8 2.5 8 6v2H4v-2c0-3.5 3-6 8-6z"/></svg>
+          <span>Скины</span>
+        </button>
+        <button class="nav__item" data-page="mods">
+          <svg viewBox="0 0 24 24"><path d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v3h20V9a2 2 0 00-2-2zM9 5h6v2H9V5zM2 14v5a2 2 0 002 2h16a2 2 0 002-2v-5h-7v3h-6v-3H2z"/></svg>
+          <span>Моды</span>
+        </button>
+        <button class="nav__item" data-page="settings">
+          <svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 000-2l2-1.6-2-3.6-2.4 1a7.6 7.6 0 00-1.8-1L14.8 3H9.2l-.5 2.8a7.6 7.6 0 00-1.8 1l-2.4-1-2 3.6L2.6 11a7.8 7.8 0 000 2l-2 1.6 2 3.6 2.4-1a7.6 7.6 0 001.8 1l.5 2.8h5.6l.5-2.8a7.6 7.6 0 001.8-1l2.4 1 2-3.6-2-1.6zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z"/></svg>
+          <span>Настройки</span>
+        </button>
+      </nav>
+
+      <div class="sidebar__footer">
+        <div class="news-card" id="newsCard">
+          <div class="news-card__tag">НОВОСТИ</div>
+          <div class="news-card__title" id="newsTitle">Minecraft 1.21 — Tricky Trials</div>
+          <div class="news-card__dots" id="newsDots"></div>
+        </div>
+        <div class="version-label">v2.4.1 • EPIC Launcher</div>
+      </div>
+    </aside>
+
+    <!-- ===== Основная область ===== -->
+    <main class="main">
+      <header class="topbar">
+        <div class="search">
+          <svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.41-1.41-4.75-4.75A6 6 0 0010 4zm0 2a4 4 0 110 8 4 4 0 010-8z"/></svg>
+          <input type="text" placeholder="Поиск версий, модов, скинов…" id="searchInput"/>
+        </div>
+        <div class="user-chip" id="userChip" title="Профиль">
+          <canvas class="avatar" id="avatarCanvas" width="64" height="64"></canvas>
+          <div class="user-chip__info">
+            <span class="user-chip__name" id="chipName">Steve</span>
+            <span class="user-chip__status" id="chipStatus">● В сети</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- === Страница: Главная === -->
+      <section class="page page--home is-active" id="page-home">
+        <div class="hero">
+          <h1 class="hero__title">ГОТОВЫ К&nbsp;ПРИКЛЮЧЕНИЯМ?</h1>
+          <p class="hero__sub">Построй. Исследуй. Выживай. Твой мир ждёт.</p>
+        </div>
+
+        <div class="cards">
+          <div class="card card--play">
+            <div class="field">
+              <label class="field__label">Аккаунт</label>
+              <div class="account-row">
+                <canvas class="avatar avatar--lg" id="avatarBig" width="96" height="96"></canvas>
+                <div class="account-row__info">
+                  <input class="input input--name" id="nickInput" value="Steve" maxlength="16" spellcheck="false"/>
+                  <div class="account-type" id="accountType">▍Не авторизован</div>
+                </div>
+                <button class="btn btn--ghost" id="randomNick" title="Случайный ник">🎲</button>
+              </div>
+              <div class="account-actions">
+                <button class="btn btn--ghost btn--sm" id="msLoginBtn">🟦 Войти через Microsoft</button>
+                <button class="btn btn--ghost btn--sm" id="offLoginBtn">⚡ Оффлайн-режим</button>
+                <button class="btn btn--ghost btn--sm is-hidden" id="logoutBtn">Выйти</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="field__label">Версия игры</label>
+              <div class="select-wrap">
+                <select class="input input--select" id="versionSelect"></select>
+                <span class="select-arrow">▾</span>
+              </div>
+              <div class="badges" id="versionBadges"></div>
+            </div>
+
+            <div class="field">
+              <label class="field__label">Оперативная память: <b id="ramLabel">4 ГБ</b></label>
+              <input type="range" min="1" max="16" value="4" class="slider" id="ramSlider"/>
+              <div class="slider-marks"><span>1G</span><span>4G</span><span>8G</span><span>12G</span><span>16G</span></div>
+            </div>
+
+            <div class="launch-zone">
+              <div class="progress" id="progress">
+                <div class="progress__bar" id="progressBar"></div>
+                <div class="progress__text" id="progressText"></div>
+              </div>
+              <button class="btn-play" id="playBtn">
+                <span class="btn-play__label">ИГРАТЬ</span>
+                <span class="btn-play__hint" id="playHint">1.21.4 • Release</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="card card--side">
+            <div class="stat-grid">
+              <div class="stat"><div class="stat__num" id="statHours">128</div><div class="stat__cap">часов в игре</div></div>
+              <div class="stat"><div class="stat__num">999+</div><div class="stat__cap">блоков добыто</div></div>
+              <div class="stat"><div class="stat__num">47</div><div class="stat__cap">серверов в списке</div></div>
+              <div class="stat"><div class="stat__num" id="statOnline">1.2M</div><div class="stat__cap">игроков онлайн</div></div>
+            </div>
+
+            <div class="servers">
+              <div class="servers__title">ИЗБРАННЫЕ СЕРВЕРЫ</div>
+              <label class="server"><input type="radio" name="server" value="" checked/><span class="server__dot server__dot--off"></span><span class="server__name">Одиночная игра</span><span class="server__ping">—</span></label>
+              <label class="server"><input type="radio" name="server" value="epicmc.ru"/><span class="server__dot"></span><span class="server__name">EpicMC — SkyWars</span><span class="server__ping">12 ms</span></label>
+              <label class="server"><input type="radio" name="server" value="minecore.net"/><span class="server__dot"></span><span class="server__name">MineCore — Anarchy</span><span class="server__ping">28 ms</span></label>
+              <label class="server"><input type="radio" name="server" value="craftworld.org"/><span class="server__dot server__dot--mid"></span><span class="server__name">CraftWorld — SMP</span><span class="server__ping">74 ms</span></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- === Страница: Скины === -->
+      <section class="page" id="page-skins">
+        <h2 class="page__title">Выбор скина</h2>
+        <div class="skins-layout">
+          <div class="skin-preview card">
+            <canvas id="skinCanvas" width="220" height="300"></canvas>
+            <div class="skin-preview__name" id="skinName">Steve — Классический</div>
+          </div>
+          <div class="skin-list" id="skinList"></div>
+        </div>
+      </section>
+
+      <!-- === Страница: Моды === -->
+      <section class="page" id="page-mods">
+        <h2 class="page__title">Моды и сборки</h2>
+        <div class="mods-grid" id="modsGrid"></div>
+      </section>
+
+      <!-- === Страница: Настройки === -->
+      <section class="page" id="page-settings">
+        <h2 class="page__title">Настройки</h2>
+        <div class="settings card settings--wide">
+          <div class="setting"><div><b>Полноэкранный режим</b><p>Запускать игру на весь экран</p></div><label class="switch"><input type="checkbox" id="setFullscreen"/><span class="switch__track"></span></label></div>
+          <div class="setting"><div><b>Обновлять ядро автоматически</b><p>Проверять новые версии лаунчера при запуске</p></div><label class="switch"><input type="checkbox" checked/><span class="switch__track"></span></label></div>
+          <div class="setting"><div><b>Звук в интерфейсе</b><p>Клик-звуки в стиле Minecraft</p></div><label class="switch"><input type="checkbox" id="setSound" checked/><span class="switch__track"></span></label></div>
+          <div class="setting"><div><b>Аргументы JVM</b><p>Дополнительные параметры запуска</p></div><input class="input input--jvm" id="setJvmArgs" value="-XX:+UseG1GC -Dfile.encoding=UTF-8"/></div>
+          <div class="setting"><div><b>Сервер для быстрого входа</b><p>IP сервера (пусто — одиночная игра)</p></div><input class="input input--jvm" id="setServerIp" placeholder="mc.hypixel.net" spellcheck="false"/></div>
+          <div class="setting"><div><b>Каталог игры</b><p>Папка .minecraft, куда скачивается игра</p></div><div class="dir-row"><input class="input input--jvm" id="setGameDir" readonly/><button class="btn btn--ghost btn--sm" id="openDirBtn">Открыть</button></div></div>
+          <div class="setting"><div><b>Статус запуска</b><p>Java, версия, код выхода процесса игры</p></div><div class="launch-status mono" id="setLaunchStatus">—</div></div>
+        </div>
+        <details class="card log-panel" id="logPanel">
+          <summary class="log-panel__head">📜 Лог игры (последний запуск)</summary>
+          <pre class="log-panel__body mono" id="gameLog"></pre>
+        </details>
+      </section>
+
+      <!-- === Оверлей запуска игры === -->
+      <div class="launch-overlay" id="launchOverlay">
+        <div class="launch-overlay__inner">
+          <div class="mojang-logo">⛏ EPIC LAUNCHER</div>
+          <div class="loading-bar"><div class="loading-bar__fill" id="overlayBar"></div></div>
+          <div class="loading-tip" id="loadingTip">Совет: факелы отпугивают мобов — освещайте пещеры!</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Тосты -->
+  <div class="toasts" id="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
