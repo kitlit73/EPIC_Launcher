@@ -560,7 +560,7 @@ function refreshPings() {
     const base = el.dataset.ping.includes('.ru') ? 24 : 90;
     const v = Math.max(8, Math.round(base + (Math.random() * 30 - 15)));
     el.textContent = v + ' ms';
-    el.style.color = v < 60 ? '#55f56f' : v < 140 ? '#ffd45e' : '#ff7a7a';
+    el.style.color = v < 60 ? '#7CE38B' : v < 140 ? '#ffb347' : '#ff7a7a';
   });
 }
 refreshPings(); setInterval(refreshPings, 15000);
@@ -606,4 +606,4 @@ window.addEventListener("beforeunload", () => {
   }));
 });
 
-console.log("%c⛏ EPIC LAUNCHER готов к приключениям!", "color:#55f56f;font-size:16px;font-weight:bold");
+console.log("%c⛏ EPIC LAUNCHER готов к приключениям!", "color:#ff7a29;font-size:16px;font-weight:bold");
