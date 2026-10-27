@@ -560,7 +560,7 @@ function refreshPings() {
     const base = el.dataset.ping.includes('.ru') ? 24 : 90;
     const v = Math.max(8, Math.round(base + (Math.random() * 30 - 15)));
     el.textContent = v + ' ms';
-    el.style.color = v < 60 ? '#7CE38B' : v < 140 ? '#ffb347' : '#ff7a7a';
+    el.style.color = v < 60 ? '#ffb347' : v < 140 ? '#ffb347' : '#ff7a7a';
   });
 }
 refreshPings(); setInterval(refreshPings, 15000);
