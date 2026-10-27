@@ -385,22 +385,7 @@ input, select { font-family: inherit; color: inherit; }
 .server__ping { font-size: 11px; color: var(--text-dim); }
 
 /* ============ СКИНЫ ============ */
-.skins-layout { display: grid; grid-template-columns: 300px 1fr; gap: 18px; }
-@media (max-width: 900px) { .skins-layout { grid-template-columns: 1fr; } }
-.skin-preview { display: flex; flex-direction: column; align-items: center; gap: 14px; }
-#skinCanvas { image-rendering: pixelated; filter: drop-shadow(0 16px 24px rgba(0,0,0,.5)); }
-.skin-preview__name { font-weight: 700; color: var(--gold); }
-.skin-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; align-content: start; }
-.skin-tile {
-  background: var(--glass); border: 1px solid var(--line);
-  border-radius: 14px; padding: 14px; text-align: center;
-  transition: transform .18s, border .2s, box-shadow .2s;
-}
-.skin-tile canvas { width: 72px; height: 96px; image-rendering: pixelated; }
-.skin-tile__label { font-size: 12px; font-weight: 600; margin-top: 8px; color: var(--text-dim); }
-.skin-tile:hover { transform: translateY(-4px) scale(1.02); border-color: rgba(255,255,255,.25); box-shadow: var(--shadow); }
-.skin-tile.is-selected { border-color: var(--green); box-shadow: 0 0 0 2px rgba(85,245,111,.35), var(--shadow); }
-.skin-tile.is-selected .skin-tile__label { color: var(--green); }
+/* (скины удалены из интерфейса) */
 
 /* ============ МОДЫ ============ */
 .mods-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
