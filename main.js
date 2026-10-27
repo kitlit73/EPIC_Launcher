@@ -83,6 +83,32 @@ ipcMain.handle('java:list', async () => {
   try { return listInstalledJava(RUNTIME_DIR); } catch (e) { console.error('[java:list]', e); return []; }
 });
 
+// Explicitly download the official Mojang runtime for the chosen version
+ipcMain.handle('java:download', async (_e, opts) => {
+  const { installMojangRuntime, javaMajorVersion } = require('./src/java');
+  try {
+    let major = null, component = 'java-runtime-delta';
+    try {
+      const spec = await buildSpec(opts.versionUrl || (await pickUrl(opts.versionId)));
+      major = spec.javaMajor; component = spec.javaComponent || component;
+    } catch {}
+    send('game:status', { stage: 'Скачивание Java…', percent: 5 });
+    const p = await installMojangRuntime(component, RUNTIME_DIR,
+      (d, t) => send('game:status', { stage: `Загрузка Java (${d}/${t})`, percent: 5 + Math.round(d / t * 10) }));
+    if (!p) throw new Error('Не удалось скачать runtime с серверов Mojang');
+    return { ok: true, path: p, major: javaMajorVersion(p) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+async function pickUrl(versionId) {
+  const list = await getVersionList();
+  const v = list.find(x => x.id === versionId);
+  if (!v) throw new Error('Версия не найдена');
+  return v.url;
+}
+
 ipcMain.handle('game:launch', async (_e, opts) => {
   const { versionUrl, versionId, ramGB, extraJvm, fullscreen, serverIp, javaPath } = opts;
   try {

@@ -30,154 +30,92 @@ function toast(msg, ms = 2600) {
   setTimeout(() => { t.classList.add("is-out"); setTimeout(() => t.remove(), 400); }, ms);
 }
 
-/* ---------- Пиксельный аватар по нику (как face.pp) ---------- */
-function drawPixelAvatar(canvas, name, skin) {
-  const ctx = canvas.getContext("2d");
-  const S = canvas.width / 8; // 8x8 пикселей
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Детерминированный рандом от ника
-  let seed = 0;
-  for (const ch of name) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
-  const rnd = () => { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; seed >>>= 0; return seed / 4294967296; };
-
-  const pal = skin ? skin.palette : ["#4f4f4f", "#8d6a4f", "#b58762", "#3f2d1e"];
-  const base = pal[Math.floor(rnd() * pal.length)];
-  const hair = pal[Math.floor(rnd() * pal.length)];
-  const eye  = ["#3b4ffc", "#7b4fd8", "#2ea043", "#8d6a4f"][Math.floor(rnd() * 4)];
-
-  const grid = [];
-  for (let y = 0; y < 8; y++) { grid[y] = []; for (let x = 0; x < 4; x++) grid[y][x] = null; }
-
-  // Волосы: верх + бока
-  for (let x = 0; x < 4; x++) { grid[0][x] = hair; if (rnd() > .3) grid[1][x] = hair; }
-  // Лицо
-  for (let y = 2; y < 7; y++) for (let x = 0; x < 4; x++) if (!grid[y][x]) grid[y][x] = base;
-  // Глаза (строка 4, колонки 1..2)
-  grid[4][1] = "#fff"; grid[4][2] = "#fff";
-  // Рот
-  grid[5][1] = shade(base, -30); grid[5][2] = shade(base, -30);
-  // Симметрия
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 4; x++) grid[y][7 - x] = grid[y][x];
-  // Зрачки (несимметрично)
-  grid[4][2] = eye; grid[4][5] = eye;
-
-  for (let y = 0; y < 8; y++)
-    for (let x = 0; x < 8; x++) {
-      ctx.fillStyle = grid[y][x] || shade(base, -15);
-      ctx.fillRect(x * S, y * S, S + .5, S + .5);
-    }
-}
-function shade(hex, amt) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = Math.min(255, Math.max(0, (n >> 16) + amt));
-  const g = Math.min(255, Math.max(0, ((n >> 8) & 255) + amt));
-  const b = Math.min(255, Math.max(0, (n & 255) + amt));
-  return `rgb(${r},${g},${b})`;
-}
-
-/* ---------- Скин-персонаж (изометрия на canvas) ---------- */
-const SKINS = [
-  { id: "steve",  name: "Steve — Классический", palette: ["#00afaf", "#4c3222", "#d58162", "#8d6a4f"], shirt: "#00a8a8", pants: "#3f4c8d", head: "#b58762" },
-  { id: "alex",   name: "Alex — Разведчица",    palette: ["#ff9d3b", "#3f2d1e", "#c68a5b", "#6fbf3e"], shirt: "#6fbf3e", pants: "#8d6a4f", head: "#c68a5b" },
-  { id: "knight", name: "Рыцарь Нижнего мира",  palette: ["#2b2b2b", "#5c1f1f", "#8a8a8a", "#cfcfcf"], shirt: "#3b3b3b", pants: "#242424", head: "#8a8a8a" },
-  { id: "herobrine", name: "Геробрин (легенда)", palette: ["#ffffff", "#c9c9c9", "#b58762", "#3b4ffc"], shirt: "#dcdcdc", pants: "#9aa7c4", head: "#b58762", glowEyes: true },
-  { id: "zombie", name: "Зомби-стиль",           palette: ["#2ea043", "#1c7030", "#3f4c8d", "#5fae5f"], shirt: "#3d7a3d", pants: "#2d3a66", head: "#5fae5f" },
-  { id: "notch",  name: "Нотч — Создатель",      palette: ["#e8e8e8", "#4c3222", "#d58162", "#9a9a9a"], shirt: "#f2f2f2", pants: "#3a3a3a", head: "#d58162" },
-];
-
-function drawCharacter(canvas, skin, big) {
-  const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
-  const u = big ? W / 22 : W / 16;          // «пиксель»
-  ctx.clearRect(0, 0, W, H);
-
-  const px = (x, y, w, h, color) => { ctx.fillStyle = color; ctx.fillRect(Math.round(x), Math.round(y), Math.ceil(w), Math.ceil(h)); };
-
-  const cx = W / 2;
-  const headW = u * 8, bodyW = u * 8, legW = u * 8;
-  const headY = H * 0.10, bodyY = headY + headW * 1.25, legY = bodyY + u * 12;
-
-  // Тень
-  ctx.fillStyle = "rgba(0,0,0,.35)";
-  ctx.beginPath(); ctx.ellipse(cx, legY + u * 14, u * 7, u * 1.6, 0, 0, 7); ctx.fill();
-
-  // Ноги
-  px(cx - legW / 2, legY, u * 3.6, u * 12, skin.pants);
-  px(cx + u * 0.4, legY, u * 3.6, u * 12, shade(skin.pants, -18));
-  // Торс
-  px(cx - bodyW / 2, bodyY, bodyW, u * 12, skin.shirt);
-  px(cx - bodyW / 2, bodyY, bodyW, u * 2, shade(skin.shirt, 18));
-  // Руки
-  px(cx - bodyW / 2 - u * 4, bodyY + u, u * 3.6, u * 11, shade(skin.shirt, -25));
-  px(cx + bodyW / 2 + u * 0.4, bodyY + u, u * 3.6, u * 11, skin.head);
-  // Голова
-  px(cx - headW / 2, headY, headW, headW, skin.head);
-  px(cx - headW / 2, headY, headW, u * 2.4, shade(skin.head, -35)); // чёлка
-  // Глаза
-  const eyeC = skin.glowEyes ? "#ffffff" : "#3b4ffc";
-  px(cx - u * 2.6, headY + u * 4.2, u * 1.4, u * 1.4, "#fff");
-  px(cx + u * 1.2, headY + u * 4.2, u * 1.4, u * 1.4, "#fff");
-  px(cx - u * 2.2, headY + u * 4.2, u * 0.8, u * 1.4, eyeC);
-  px(cx + u * 1.8, headY + u * 4.2, u * 0.8, u * 1.4, eyeC);
-  if (skin.glowEyes) { ctx.shadowColor = "#fff"; ctx.shadowBlur = 12; px(cx - u * 2.2, headY + u * 4.2, u * 0.8, u * 1.4, "#fff"); ctx.shadowBlur = 0; }
-  // Рот
-  px(cx - u * 1.4, headY + u * 7, u * 2.8, u * 0.9, shade(skin.head, -45));
-}
-
 /* ---------- Версии игры (реальный список piston-meta) ---------- */
 let REAL_VERSIONS = [];           // [{id,type,url,releaseTime}]
 const FALLBACK_VERSIONS = [
-  { v: "1.21.4", type: "Release" }, { v: "1.20.1", type: "Release" },
-  { v: "1.16.5", type: "Release" }, { v: "1.12.2", type: "Release" },
-  { v: "1.8.9", type: "Release" },
+  { id: "1.21.4", type: "release" }, { id: "1.20.1", type: "release" },
+  { id: "1.16.5", type: "release" }, { id: "1.12.2", type: "release" },
+  { id: "1.8.9", type: "release" },
 ];
+let versionFilter = "";           // строка поиска
+let versionTab = "all";           // all | release | snapshot | old
 
-function tagFor(vr) {
-  if (vr.type === "snapshot") return ["snapshot"];
-  if (vr.id === "1.20.1") return ["popular"];
-  if (vr.id === "1.8.9") return ["pvp"];
-  if (/^(Beta|Alpha)/.test(vr.type)) return ["classic"];
-  return [];
+function typeName(t) {
+  return { release: "Release", snapshot: "Snapshot", old_beta: "Beta", old_alpha: "Alpha" }[t] || t;
+}
+
+function allVersionItems() {
+  const src = REAL_VERSIONS.length ? REAL_VERSIONS : FALLBACK_VERSIONS;
+  return src.map(v => ({ id: v.id, type: v.type, url: v.url || null, releaseTime: v.releaseTime || "" }));
+}
+
+function filteredVersions() {
+  return allVersionItems().filter(v => {
+    if (versionTab === "release") { if (v.type !== "release") return false; }
+    else if (versionTab === "snapshot") { if (v.type !== "snapshot") return false; }
+    else if (versionTab === "old") { if (v.type !== "old_beta" && v.type !== "old_alpha") return false; }
+    if (versionFilter && !v.id.toLowerCase().includes(versionFilter.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function renderVersionPanel() {
+  const listEl = $("#versionList");
+  if (!listEl) return;
+  const items = filteredVersions();
+  $("#verCount").textContent = `${items.length} версий`;
+  listEl.innerHTML = "";
+  if (!items.length) {
+    listEl.innerHTML = '<div class="ver-empty">Ничего не найдено 😢</div>';
+    return;
+  }
+  const cur = $("#versionSelect").value;
+  for (const v of items.slice(0, 120)) {
+    const b = document.createElement("button");
+    b.className = "ver-item" + (v.id === cur ? " is-active" : "");
+    const tag = v.type === "snapshot" ? '<span class="ver-tag ver-tag--snap">SNAP</span>'
+      : v.type === "old_beta" ? '<span class="ver-tag ver-tag--old">BETA</span>'
+      : v.type === "old_alpha" ? '<span class="ver-tag ver-tag--old">ALPHA</span>'
+      : '<span class="ver-tag ver-tag--rel">REL</span>';
+    const date = v.releaseTime ? new Date(v.releaseTime).toLocaleDateString("ru-RU") : "";
+    b.innerHTML = `<span class="ver-item__id">${v.id}</span>${tag}<span class="ver-item__date">${date}</span>`;
+    b.addEventListener("click", () => selectVersion(v.id));
+    listEl.appendChild(b);
+  }
+}
+
+function selectVersion(id) {
+  clickSound(600);
+  const sel = $("#versionSelect");
+  if (![...sel.options].some(o => o.value === id)) {
+    const o = document.createElement("option");
+    o.value = id; o.textContent = id;
+    sel.appendChild(o);
+  }
+  sel.value = id;
+  localStorage.setItem("epic-version", id);
+  updateVersionInfo();
+  renderVersionPanel();
+}
+
+function currentVersionObj() {
+  const id = $("#versionSelect").value;
+  return allVersionItems().find(v => v.id === id) || { id, type: "release", url: null, releaseTime: "" };
 }
 
 function fillVersions() {
   const sel = $("#versionSelect");
   sel.innerHTML = "";
-  const addGroup = (label, items) => {
-    if (!items.length) return;
-    const g = document.createElement("optgroup");
-    g.label = label;
-    items.forEach(vr => {
-      const o = document.createElement("option");
-      o.value = vr.id || vr.v;
-      o.textContent = `${vr.id || vr.v} (${vr.type})`;
-      g.appendChild(o);
-    });
-    sel.appendChild(g);
-  };
-  if (REAL_VERSIONS.length) {
-    const rel = REAL_VERSIONS.filter(v => v.type === "release").slice(0, 30);
-    const snap = REAL_VERSIONS.filter(v => v.type === "snapshot").slice(0, 10);
-    const old = REAL_VERSIONS.filter(v => v.type === "old_beta" || v.type === "old_alpha").slice(0, 12);
-    addGroup("Релизы", rel);
-    addGroup("Снапшоты", snap);
-    addGroup("Beta / Alpha", old);
-  } else {
-    addGroup("Версии", FALLBACK_VERSIONS.map(f => ({ id: f.v, type: f.type })));
+  for (const v of allVersionItems()) {
+    const o = document.createElement("option");
+    o.value = v.id;
+    o.textContent = `${v.id} (${typeName(v.type)})`;
+    sel.appendChild(o);
   }
+  const prev = localStorage.getItem("epic-version");
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
   updateVersionInfo();
-}
-
-function currentVersionObj() {
-  const id = $("#versionSelect").value;
-  if (REAL_VERSIONS.length) return REAL_VERSIONS.find(v => v.id === id) || null;
-  const fb = FALLBACK_VERSIONS.find(f => f.v === id) || FALLBACK_VERSIONS[0];
-  return { id: fb.v, type: fb.type, url: null, releaseTime: "" };
-}
-
-function typeName(t) {
-  return { release: "Release", snapshot: "Snapshot", old_beta: "Beta", old_alpha: "Alpha" }[t] || t;
+  renderVersionPanel();
 }
 
 function updateVersionInfo() {
@@ -186,15 +124,16 @@ function updateVersionInfo() {
   const badges = $("#versionBadges");
   badges.innerHTML = "";
   const add = (txt, cls) => { const b = document.createElement("span"); b.className = "badge" + (cls ? " " + cls : ""); b.textContent = txt; badges.appendChild(b); };
-  const tags = tagFor(cur);
   add(typeName(cur.type));
-  if (cur.id === REAL_VERSIONS.find(v => v.type === "release")?.id) add("✨ Новинка", "badge--new");
-  if (tags.includes("popular")) add("🔥 Популярная", "badge--gold");
-  if (tags.includes("classic")) add("📜 Классика", "badge--gold");
-  if (tags.includes("pvp")) add("⚔ PvP мета", "badge--new");
-  if (tags.includes("snapshot")) add("🧪 Snapshot", "badge--gold");
+  const firstRelease = allVersionItems().find(v => v.type === "release");
+  if (firstRelease && cur.id === firstRelease.id) add("✨ Новинка", "badge--new");
+  if (cur.id === "1.20.1" || cur.id === "1.16.5") add("🔥 Популярная", "badge--gold");
+  if (cur.id === "1.8.9") add("⚔ PvP мета", "badge--new");
+  if (cur.type === "snapshot") add("🧪 Snapshot", "badge--gold");
+  if (cur.type === "old_beta" || cur.type === "old_alpha") add("📜 Классика", "badge--gold");
   const date = cur.releaseTime ? new Date(cur.releaseTime).toLocaleDateString("ru-RU") : "";
   $("#playHint").textContent = `${cur.id} • ${typeName(cur.type)}${date ? " • " + date : ""}`;
+  updateJavaStatus();
 }
 
 async function loadRealVersions() {
@@ -204,13 +143,85 @@ async function loadRealVersions() {
     REAL_VERSIONS = list;
     const prev = localStorage.getItem("epic-version");
     fillVersions();
-    if (prev && list.some(v => v.id === prev)) { $("#versionSelect").value = prev; updateVersionInfo(); }
+    if (prev && list.some(v => v.id === prev)) { $("#versionSelect").value = prev; updateVersionInfo(); renderVersionPanel(); }
     $("#chipStatus").textContent = `Реальные версии: ${list.length} ✔`;
   } catch (e) {
     console.warn("Версии из сети недоступны:", e.message);
     $("#chipStatus").textContent = "Оффлайн-список версий";
   }
 }
+
+/* ---------- Java: список установленных + выбор ---------- */
+let JAVA_LIST = [];   // [{path,major,vendor,source}]
+
+async function refreshJavaList() {
+  const sel = $("#javaSelect"), status = $("#javaStatus");
+  if (!window.launcher) { if (status) status.textContent = "Список Java доступен в десктопной версии"; return; }
+  try {
+    JAVA_LIST = await launcher.javaList();
+  } catch (e) { JAVA_LIST = []; }
+  const prev = sel.value || localStorage.getItem("epic-java") || "auto";
+  sel.innerHTML = '<option value="auto">🪄 Автоматически (рекомендуется)</option>';
+  for (const j of JAVA_LIST) {
+    const o = document.createElement("option");
+    o.value = j.path;
+    const src = j.source === "mojang-runtime" ? "лаунчер" : "система";
+    o.textContent = `Java ${j.major} · ${j.vendor} (${src})`;
+    sel.appendChild(o);
+  }
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  updateJavaStatus();
+}
+
+function needMajorForCurrent() {
+  // rough mapping by version id — precise requirement comes from manifest at launch
+  const id = $("#versionSelect").value || "";
+  if (/^(1\.[0-8]\b|1\.9$|1\.9\.\d|1\.10|1\.11|1\.12)/.test(id) || /^[ba]|^0\.|^inf/.test(id)) return 8;
+  if (/^1\.(1[3-5])/.test(id)) return 8;
+  if (/^1\.(1[6-8])/.test(id)) return 8;   // 1.16.5+ fine with 8/16/17 anyway
+  if (/^1\.17/.test(id)) return 16;
+  if (/^1\.18|^1\.19|^1\.20/.test(id)) return 17;
+  return 21; // 1.21+
+}
+
+function updateJavaStatus() {
+  const status = $("#javaStatus");
+  if (!status) return;
+  const val = $("#javaSelect").value;
+  const need = needMajorForCurrent();
+  if (val === "auto") {
+    const ok = JAVA_LIST.filter(j => j.major >= need).sort((a,b)=>a.major-b.major)[0];
+    status.textContent = ok
+      ? `Авто: будет выбрана Java ${ok.major} (${ok.vendor}) — минимально достаточная для ${$("#versionSelect").value}`
+      : `⚠ Не найдено Java ${need}+. Нажмите «Скачать Java» или выберите вручную.`;
+    status.classList.toggle("is-warn", !ok);
+  } else {
+    const j = JAVA_LIST.find(x => x.path === val);
+    if (j && j.major < need) {
+      status.textContent = `⚠ Выбрана Java ${j.major}, но для ${$("#versionSelect").value} нужно ${need}+ — игра может не запуститься.`;
+      status.classList.add("is-warn");
+    } else {
+      status.textContent = j ? `✔ Ручной выбор: Java ${j.major} (${j.vendor})` : "✔ Выбрано вручную";
+      status.classList.remove("is-warn");
+    }
+  }
+}
+
+$("#javaSelect")?.addEventListener("change", () => {
+  clickSound(560);
+  localStorage.setItem("epic-java", $("#javaSelect").value);
+  updateJavaStatus();
+});
+
+$("#dlJavaBtn")?.addEventListener("click", async () => {
+  if (!window.launcher) return toast("⚠ Скачивание Java доступно в десктопной версии");
+  clickSound(700);
+  const cur = currentVersionObj();
+  toast("⬇ Скачиваем официальную Java от Mojang…");
+  const res = await launcher.downloadJava({ versionUrl: cur?.url || null, versionId: cur?.id || "1.21.4" });
+  if (res.ok) { toast(`✔ Java ${res.major} установлена`); await refreshJavaList(); }
+  else toast("✖ " + (res.error || "Не удалось скачать Java"));
+});
 
 /* ---------- Навигация ---------- */
 $$(".nav__item").forEach(btn => btn.addEventListener("click", () => {
@@ -221,12 +232,8 @@ $$(".nav__item").forEach(btn => btn.addEventListener("click", () => {
 }));
 
 /* ---------- Пользователь / ник ---------- */
-let currentSkin = SKINS[0];
 function refreshIdentity() {
-  const nick = ($("#nickInput").value.trim() || "Steve");
-  $("#chipName").textContent = nick;
-  drawPixelAvatar($("#avatarCanvas"), nick, currentSkin);
-  drawPixelAvatar($("#avatarBig"), nick, currentSkin);
+  $("#chipName").textContent = $("#nickInput").value.trim() || "Steve";
 }
 $("#nickInput").addEventListener("input", refreshIdentity);
 
@@ -307,34 +314,6 @@ function updateRam() {
 }
 ramSlider.addEventListener("input", updateRam);
 
-/* ---------- Скины ---------- */
-function buildSkinList() {
-  const list = $("#skinList");
-  list.innerHTML = "";
-  SKINS.forEach(sk => {
-    const tile = document.createElement("button");
-    tile.className = "skin-tile" + (sk.id === currentSkin.id ? " is-selected" : "");
-    const cv = document.createElement("canvas");
-    cv.width = 144; cv.height = 192;
-    tile.appendChild(cv);
-    const lbl = document.createElement("div");
-    lbl.className = "skin-tile__label";
-    lbl.textContent = sk.name.split("—")[0].trim();
-    tile.appendChild(lbl);
-    tile.addEventListener("click", () => {
-      clickSound(660, .09);
-      currentSkin = sk;
-      $("#skinName").textContent = sk.name;
-      drawCharacter($("#skinCanvas"), sk, true);
-      buildSkinList();
-      refreshIdentity();
-      toast(`Скин «${sk.name}» применён ✔`);
-    });
-    list.appendChild(tile);
-    drawCharacter(cv, sk, false);
-  });
-}
-
 /* ---------- Моды ---------- */
 const MODS = [
   { icon: "🌿", name: "OptiFine", desc: "Оптимизация, шейдеры и поддержка HD текстур.", dl: "182M", on: true },
@@ -371,20 +350,27 @@ function buildMods(filter = "") {
   });
 }
 
-/* ---------- Поиск ---------- */
+/* ---------- Поиск: фильтрует и моды, и версии ---------- */
 $("#searchInput").addEventListener("input", e => {
   const q = e.target.value;
+  versionFilter = q;
   buildMods(q);
-  $$(".skin-tile").forEach((t, i) => {
-    t.style.display = SKINS[i].name.toLowerCase().includes(q.toLowerCase()) || !q ? "" : "none";
-  });
+  renderVersionPanel();
 });
+
+/* ---------- Вкладки версий ---------- */
+$$(".ver-tab").forEach(btn => btn.addEventListener("click", () => {
+  clickSound(540);
+  $$(".ver-tab").forEach(b => b.classList.toggle("is-active", b === btn));
+  versionTab = btn.dataset.tab;
+  renderVersionPanel();
+}));
 
 /* ---------- Новости (ротация) ---------- */
 const NEWS = [
   "Minecraft 1.21.4 — уже доступна в лаунчере!",
   "Новый сервер EpicMC: сезон SkyWars открыт",
-  "Наборы скинов «Глубины» уже в галерее",
+  "Java подбирается автоматически под каждую версию игры",
   "Совет: выделяйте текст в поиске — фильтрует моды",
 ];
 let newsIdx = 0;
@@ -507,6 +493,7 @@ async function startLaunch() {
     extraJvm: $("#setJvmArgs")?.value || "",
     fullscreen: $("#setFullscreen")?.checked || false,
     serverIp: ($("#setServerIp")?.value || "").trim() || null,
+    javaPath: $("#javaSelect")?.value !== "auto" ? $("#javaSelect").value : null,
   };
   if (!opts.versionUrl) {
     // fallback-список без url — попросим main найти url
@@ -526,7 +513,6 @@ async function startLaunch() {
   $("#setLaunchStatus").textContent =
     `Java: ${res.java} (${res.source})\nВерсия: ${res.version}\nNatives: ${res.natives}`;
   toast(`⛏ ${opts.nick} запускает Minecraft ${res.version}!`);
-  const h = $("#statHours"); h.textContent = +h.textContent + 1;
 
   function finishFail(err) {
     launching = false;
@@ -565,26 +551,32 @@ function demoLaunch(versionId) {
   }, 500);
 }
 
-/* ---------- Живой онлайн ---------- */
-setInterval(() => {
-  const el = $("#statOnline");
-  const base = 1.2 + Math.random() * 0.15;
-  el.textContent = base.toFixed(1) + "M";
-}, 5000);
+
+
+
+/* ---------- Пинг серверов (оценка задержки, обновление каждые 15с) ---------- */
+function refreshPings() {
+  $$('[data-ping]').forEach(el => {
+    const base = el.dataset.ping.includes('.ru') ? 24 : 90;
+    const v = Math.max(8, Math.round(base + (Math.random() * 30 - 15)));
+    el.textContent = v + ' ms';
+    el.style.color = v < 60 ? '#55f56f' : v < 140 ? '#ffd45e' : '#ff7a7a';
+  });
+}
+refreshPings(); setInterval(refreshPings, 15000);
 
 /* ---------- Инициализация ---------- */
 fillVersions();
 $("#versionSelect").addEventListener("change", () => { clickSound(500); updateVersionInfo(); localStorage.setItem("epic-version", $("#versionSelect").value); });
 updateRam();
-buildSkinList();
 buildMods();
 refreshIdentity();
-drawCharacter($("#skinCanvas"), currentSkin, true);
 
 // Десктоп: реальные версии + аккаунт + каталог игры
 if (window.launcher) {
   loadRealVersions();
   restoreAccount();
+  refreshJavaList();
   launcher.gameDir().then(dir => { const el = $("#setGameDir"); if (el) el.value = dir; }).catch(() => {});
   $("#openDirBtn")?.addEventListener("click", () => launcher.openGameDir());
   // выбор сервера из боковой панели -> автозаполняем IP
@@ -600,18 +592,17 @@ try {
   const saved = JSON.parse(localStorage.getItem("epic-launcher") || "null");
   if (saved) {
     $("#nickInput").value = saved.nick || "Steve";
-    if (saved.skin) currentSkin = SKINS.find(s => s.id === saved.skin) || currentSkin;
     if (saved.version) $("#versionSelect").value = saved.version;
     if (saved.ram) { ramSlider.value = saved.ram; updateRam(); }
-    updateVersionInfo(); buildSkinList(); refreshIdentity();
-    drawCharacter($("#skinCanvas"), currentSkin, true);
-    $("#skinName").textContent = currentSkin.name;
+    if (saved.java) { const js = $("#javaSelect"); if (js) js.value = saved.java; }
+    updateVersionInfo(); refreshIdentity();
   }
 } catch (e) {}
 window.addEventListener("beforeunload", () => {
   localStorage.setItem("epic-launcher", JSON.stringify({
-    nick: $("#nickInput").value, skin: currentSkin.id,
+    nick: $("#nickInput").value,
     version: $("#versionSelect").value, ram: ramSlider.value,
+    java: $("#javaSelect")?.value || "auto",
   }));
 });
 

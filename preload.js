@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('launcher', {
   launch: (opts) => ipcRenderer.invoke('game:launch', opts),
   killGame: () => ipcRenderer.invoke('game:kill'),
   javaList: () => ipcRenderer.invoke('java:list'),
+  downloadJava: (opts) => ipcRenderer.invoke('java:download', opts),
   openGameDir: () => ipcRenderer.invoke('paths:open'),
   gameDir: () => ipcRenderer.invoke('paths:gameDir'),
   onStatus: (cb) => ipcRenderer.on('game:status', (_e, p) => cb(p)),

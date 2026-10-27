@@ -6,13 +6,15 @@
   <title>EPIC Launcher — Minecraft Launcher</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛏️</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Unbounded:wght@500;700;900&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <!-- ===== Фон: параллакс мир Minecraft ===== -->
   <div class="scene" aria-hidden="true">
     <div class="sky"></div>
+    <div class="stars"></div>
+    <div class="aurora"></div>
     <div class="sun"></div>
     <div class="clouds clouds--far"></div>
     <div class="clouds clouds--near"></div>
@@ -39,10 +41,6 @@
           <svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3z"/></svg>
           <span>Главная</span>
         </button>
-        <button class="nav__item" data-page="skins">
-          <svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 110 10 5 5 0 010-10zm0 12c5 0 8 2.5 8 6v2H4v-2c0-3.5 3-6 8-6z"/></svg>
-          <span>Скины</span>
-        </button>
         <button class="nav__item" data-page="mods">
           <svg viewBox="0 0 24 24"><path d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v3h20V9a2 2 0 00-2-2zM9 5h6v2H9V5zM2 14v5a2 2 0 002 2h16a2 2 0 002-2v-5h-7v3h-6v-3H2z"/></svg>
           <span>Моды</span>
@@ -68,10 +66,9 @@
       <header class="topbar">
         <div class="search">
           <svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.41-1.41-4.75-4.75A6 6 0 0010 4zm0 2a4 4 0 110 8 4 4 0 010-8z"/></svg>
-          <input type="text" placeholder="Поиск версий, модов, скинов…" id="searchInput"/>
+          <input type="text" placeholder="Поиск версий и модов…" id="searchInput"/>
         </div>
         <div class="user-chip" id="userChip" title="Профиль">
-          <canvas class="avatar" id="avatarCanvas" width="64" height="64"></canvas>
           <div class="user-chip__info">
             <span class="user-chip__name" id="chipName">Steve</span>
             <span class="user-chip__status" id="chipStatus">● В сети</span>
@@ -91,7 +88,6 @@
             <div class="field">
               <label class="field__label">Аккаунт</label>
               <div class="account-row">
-                <canvas class="avatar avatar--lg" id="avatarBig" width="96" height="96"></canvas>
                 <div class="account-row__info">
                   <input class="input input--name" id="nickInput" value="Steve" maxlength="16" spellcheck="false"/>
                   <div class="account-type" id="accountType">▍Не авторизован</div>
@@ -106,12 +102,27 @@
             </div>
 
             <div class="field">
-              <label class="field__label">Версия игры</label>
-              <div class="select-wrap">
-                <select class="input input--select" id="versionSelect"></select>
-                <span class="select-arrow">▾</span>
+              <label class="field__label">Версия игры <span class="ver-count" id="verCount"></span></label>
+              <div class="ver-tabs" id="verTabs">
+                <button class="ver-tab is-active" data-tab="all">Все</button>
+                <button class="ver-tab" data-tab="release">Релизы</button>
+                <button class="ver-tab" data-tab="snapshot">Снапшоты</button>
+                <button class="ver-tab" data-tab="old">Beta/Alpha</button>
               </div>
+              <div class="ver-list" id="versionList"></div>
+              <select class="input input--select is-hidden" id="versionSelect"></select>
               <div class="badges" id="versionBadges"></div>
+            </div>
+
+            <div class="field">
+              <label class="field__label">Java</label>
+              <div class="java-row">
+                <select class="input input--select" id="javaSelect">
+                  <option value="auto">🪄 Автоматически (рекомендуется)</option>
+                </select>
+                <button class="btn btn--ghost btn--sm" id="dlJavaBtn">⬇ Скачать Java</button>
+              </div>
+              <div class="java-status" id="javaStatus">Поиск установленных JDK…</div>
             </div>
 
             <div class="field">
@@ -133,33 +144,15 @@
           </div>
 
           <div class="card card--side">
-            <div class="stat-grid">
-              <div class="stat"><div class="stat__num" id="statHours">128</div><div class="stat__cap">часов в игре</div></div>
-              <div class="stat"><div class="stat__num">999+</div><div class="stat__cap">блоков добыто</div></div>
-              <div class="stat"><div class="stat__num">47</div><div class="stat__cap">серверов в списке</div></div>
-              <div class="stat"><div class="stat__num" id="statOnline">1.2M</div><div class="stat__cap">игроков онлайн</div></div>
-            </div>
-
             <div class="servers">
-              <div class="servers__title">ИЗБРАННЫЕ СЕРВЕРЫ</div>
+              <div class="servers__title">ПОПУЛЯРНЫЕ СЕРВЕРЫ</div>
               <label class="server"><input type="radio" name="server" value="" checked/><span class="server__dot server__dot--off"></span><span class="server__name">Одиночная игра</span><span class="server__ping">—</span></label>
-              <label class="server"><input type="radio" name="server" value="epicmc.ru"/><span class="server__dot"></span><span class="server__name">EpicMC — SkyWars</span><span class="server__ping">12 ms</span></label>
-              <label class="server"><input type="radio" name="server" value="minecore.net"/><span class="server__dot"></span><span class="server__name">MineCore — Anarchy</span><span class="server__ping">28 ms</span></label>
-              <label class="server"><input type="radio" name="server" value="craftworld.org"/><span class="server__dot server__dot--mid"></span><span class="server__name">CraftWorld — SMP</span><span class="server__ping">74 ms</span></label>
+              <label class="server"><input type="radio" name="server" value="mc.hypixel.net"/><span class="server__dot"></span><span class="server__name">Hypixel</span><span class="server__ping" data-ping="mc.hypixel.net">…</span></label>
+              <label class="server"><input type="radio" name="server" value="play.minemen.net"/><span class="server__dot"></span><span class="server__name">MineMan</span><span class="server__ping" data-ping="play.minemen.net">…</span></label>
+              <label class="server"><input type="radio" name="server" value="eu.mineserv.net"/><span class="server__dot server__dot--mid"></span><span class="server__name">MiniServ</span><span class="server__ping" data-ping="eu.mineserv.net">…</span></label>
+              <label class="server"><input type="radio" name="server" value="projectgaming.ru"/><span class="server__dot"></span><span class="server__name">ProjectGaming</span><span class="server__ping" data-ping="projectgaming.ru">…</span></label>
             </div>
           </div>
-        </div>
-      </section>
-
-      <!-- === Страница: Скины === -->
-      <section class="page" id="page-skins">
-        <h2 class="page__title">Выбор скина</h2>
-        <div class="skins-layout">
-          <div class="skin-preview card">
-            <canvas id="skinCanvas" width="220" height="300"></canvas>
-            <div class="skin-preview__name" id="skinName">Steve — Классический</div>
-          </div>
-          <div class="skin-list" id="skinList"></div>
         </div>
       </section>
 

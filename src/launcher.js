@@ -29,7 +29,10 @@ function buildArgs(spec, paths, opts) {
     '${auth_xuid}': auth.xuid || '0',
     '${client_token}': auth.clientToken || '00000000000000000000000000000000',
     '${user_properties}': JSON.stringify(auth.properties || { textures: {} }),
-    '${user_type}': auth.type === 'microsoft' ? 'msa' : 'legacy',
+    // IMPORTANT: never emit 'legacy' / 'demo' user types — the client enables the
+    // 40-minute DEMO mode for those. 'msa' + --has_minecraft keeps the full game.
+    // (Online servers still verify licenses server-side; offline play is unaffected.)
+    '${user_type}': 'msa',
     '${version_name}': spec.id,
     '${game_directory}': gameDir,
     '${assets_root}': assetsRoot,
@@ -83,13 +86,25 @@ function buildArgs(spec, paths, opts) {
 
   const game = spec.argsGame.map(subst).filter(Boolean);
 
+  // Demo-mode guard for modern versions: replace any demo token and make sure
+  // the ownership flags are present exactly once.
+  if (!isLegacy(spec.id)) {
+    const dt = game.indexOf('--accessToken');
+    if (dt !== -1 && /^MCmsa:demo/i.test(String(game[dt + 1] || ''))) {
+      game[dt + 1] = auth.token || '0';
+    }
+    if (!game.includes('--has_minecraft')) game.push('--has_minecraft');
+    if (!game.includes('--has_dungeons')) game.push('--has_dungeons');
+  }
+
   // legacy argument names used by old versions
   if (isLegacy(spec.id)) {
     const legacyMap = {
       '--username': auth.nick, '--session': auth.token, '--has_microsoft': null,
+      '--has_minecraft': null,   // keep flag without value — signals full ownership
       '--version': spec.id, '--gameDir': gameDir, '--assetsDir': assetsRoot,
       '--assetIndex': map['${assets_index_name}'], '--uuid': auth.uuid,
-      '--accessToken': auth.token, '--userType': map['${user_type}'],
+      '--accessToken': auth.token, '--userType': 'msa',
       '--userProperties': '{}',
     };
     const out = [];
