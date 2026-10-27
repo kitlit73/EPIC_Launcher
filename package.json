@@ -7,5 +7,82 @@
   "license": "MIT",
   "dependencies": {
     "adm-zip": "^0.5.17"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.epic.launcher",
+    "productName": "EPIC Launcher",
+    "directories": {
+      "output": "dist-app",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app.js",
+      "index.html",
+      "styles.css",
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/@electron/rebuild/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "EPIC Launcher"
+    },
+    "portable": {
+      "artifactName": "EpicLauncher-${version}-win.exe"
+    },
+    "linux": {
+      "target": {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      },
+      "category": "Game",
+      "synopsis": "Real Minecraft Java Edition launcher",
+      "artifactName": "EpicLauncher-${version}-linux.AppImage"
+    },
+    "mac": {
+      "target": {
+        "target": "dmg",
+        "arch": [
+          "x64",
+          "arm64"
+        ]
+      },
+      "category": "public.app-category.games",
+      "artifactName": "EpicLauncher-${version}-${arch}.dmg"
+    }
   }
 }
