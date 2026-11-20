@@ -100,6 +100,36 @@ async function downloadMod(url, dest, onProgress) {
   return dest;
 }
 
+// Манифест установленных модов (mods/.epic-mods.json): точное сопоставление
+// source+modId с файлом — вместо эвристики по slug/названию.
+function manifestFile(modsDir) { return path.join(modsDir, '.epic-mods.json'); }
+
+function readModManifest(modsDir) {
+  try {
+    const arr = JSON.parse(fs.readFileSync(manifestFile(modsDir), 'utf8'));
+    return Array.isArray(arr) ? arr : [];
+  } catch { return []; }
+}
+
+function writeModManifest(modsDir, arr) {
+  fs.mkdirSync(modsDir, { recursive: true });
+  fs.writeFileSync(manifestFile(modsDir), JSON.stringify(arr, null, 2));
+}
+
+function addModManifestEntry(modsDir, entry) {
+  const arr = readModManifest(modsDir).filter(x =>
+    !(x.modId === entry.modId && x.source === entry.source));
+  arr.push({ ...entry, installedAt: new Date().toISOString() });
+  writeModManifest(modsDir, arr);
+  return arr;
+}
+
+function removeModManifestEntry(modsDir, filename) {
+  const arr = readModManifest(modsDir).filter(x => x.filename !== filename);
+  writeModManifest(modsDir, arr);
+  return arr;
+}
+
 async function searchMods(source, query, gameVersion) {
   return searchModrinth(query, gameVersion);
 }
@@ -110,7 +140,8 @@ function deleteModFile(modsDir, filename) {
   const target = path.join(modsDir, filename);
   if (!fs.existsSync(target)) throw new Error('Мод не найден: ' + filename);
   fs.unlinkSync(target);
+  removeModManifestEntry(modsDir, filename);
   return true;
 }
 
-module.exports = { searchMods, searchModrinth, modrinthVersionFile, downloadMod, pickModVersion, deleteModFile };
+module.exports = { searchMods, searchModrinth, modrinthVersionFile, downloadMod, pickModVersion, deleteModFile, readModManifest, addModManifestEntry, removeModManifestEntry };

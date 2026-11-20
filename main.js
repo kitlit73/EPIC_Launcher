@@ -521,15 +521,16 @@ ipcMain.handle('mods:search', async (_e, { source, query, gameVersion }) => {
   }
 });
 
-// { source, modId, gameVersion, loader } -> resolves download url and writes the file into mods/
-ipcMain.handle('mods:download', async (_e, { source, modId, gameVersion, loader, instanceId }) => {
-  const { modrinthVersionFile, downloadMod } = require('./src/mods');
+// { source, modId, gameVersion, loader, title, slug, instanceId } -> скачивает .jar в mods/ и пишет манифест
+ipcMain.handle('mods:download', async (_e, { source, modId, gameVersion, loader, title, slug, instanceId }) => {
+  const { modrinthVersionFile, downloadMod, addModManifestEntry } = require('./src/mods');
   try {
     const file = await modrinthVersionFile(modId, gameVersion || null, loader || 'any');
     const dir = MODS_DIR(instanceId);
     fs.mkdirSync(dir, { recursive: true });
     const dest = path.join(dir, file.filename);
     await downloadMod(file.url, dest, pct => send('mods:progress', { pct, filename: file.filename }));
+    addModManifestEntry(dir, { source: source || 'modrinth', modId: String(modId), slug: slug || '', title: title || '', filename: file.filename, loader: loader || 'any' });
     return { ok: true, filename: file.filename, loader: file.loader };
   } catch (e) {
     return { ok: false, error: e.message };
@@ -547,12 +548,16 @@ ipcMain.handle('mods:delete', async (_e, filename, instanceId) => {
   }
 });
 
+// -> { files: ['X.jar',...], manifest: [{source, modId, slug, title, filename}] }
 ipcMain.handle('mods:listInstalled', async (_e, instanceId) => {
   try {
+    const { readModManifest } = require('./src/mods');
     const dir = MODS_DIR(instanceId);
-    if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir).filter(f => /\.jar$/i.test(f));
-  } catch { return []; }
+    if (!fs.existsSync(dir)) return { files: [], manifest: [] };
+    const files = fs.readdirSync(dir).filter(f => /\.jar$/i.test(f));
+    const manifest = readModManifest(dir).filter(x => files.includes(x.filename));
+    return { files, manifest };
+  } catch { return { files: [], manifest: [] }; }
 });
 
 /* ---------------- Сборки из каталогов (Modrinth / FTB) ---------------- */

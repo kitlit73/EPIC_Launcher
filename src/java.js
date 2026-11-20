@@ -66,49 +66,73 @@ async function listAvailableRuntimes(runtimeDir) {
 
 /** Download + extract an official Mojang JRE into runtimes/<component>. Returns java bin path or null. */
 async function installMojangRuntime(component, runtimeDir, onProgress) {
+  let tmpDir = null;
   try {
     const idx = await getRuntimeIndex();
     const osKey = mojangOs();
     const list = idx[osKey] && idx[osKey][component];
     if (!list || !list.length) return null;
     const latest = list[0].manifest;
-    const entries = await fetchJson(latest.url);
+    const manifest = await fetchJsonSafe(latest.url);
 
     const target = path.join(runtimeDir, component);
     const javaBin = path.join(target, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
     if (fs.existsSync(javaBin)) return javaBin;
 
-    fs.mkdirSync(target, { recursive: true });
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jre-'));
+    // Новый формат (products/java-runtime): {files: {путь: {downloads:{raw:{url}}}}} —
+    // уже распакованное дерево, качаем файлы напрямую в target.
+    // Старый формат: массив entries с архивом внутри (качаем во tmp, распаковываем).
+    let entries, exploded = false;
+    if (Array.isArray(manifest)) {
+      entries = manifest;
+    } else if (manifest && manifest.files && typeof manifest.files === 'object') {
+      exploded = true;
+      entries = Object.entries(manifest.files).map(([p, def]) => ({
+        path: p,
+        type: def.type || (def.downloads ? 'file' : 'directory'),
+        url: def.downloads && def.downloads.raw ? def.downloads.raw.url : null,
+      }));
+    } else {
+      throw new Error('Неизвестный формат манифеста JRE');
+    }
 
+    const files = entries.filter(e => e && e.type === 'file' && e.url);
     let done = 0;
-    for (const e of entries) {
-      if (!e.url || e.type !== 'file') continue;
-      // СТРИМ в файл: arrayBuffer() на CDN Mojang обрывается ("fetch failed"),
-      // из-за чего установка Java раньше не проходила.
-      const local = path.join(tmp, path.basename(e.path));
+    const grab = async e => {
+      const local = exploded ? path.join(target, e.path) : path.join(tmpDir, path.basename(e.path));
+      fs.mkdirSync(path.dirname(local), { recursive: true });
       const res2 = await smartFetch(e.url, { headers: { 'User-Agent': 'epic-launcher/1.0.0' } });
       if (!res2.ok) throw new Error(`JRE HTTP ${res2.status}`);
       const ws = fs.createWriteStream(local);
       for await (const chunk of res2.body) ws.write(chunk);
       await new Promise(r => ws.end(r));
       done++;
-      if (onProgress) onProgress(done, entries.length, e.path);
+      if (onProgress) onProgress(done, files.length, e.path);
+    };
+
+    fs.mkdirSync(target, { recursive: true });
+    if (exploded) {
+      // параллельно по 6 файлов — быстрее на 200+ мелких файлах
+      for (let i = 0; i < files.length; i += 6) {
+        await Promise.all(files.slice(i, i + 6).map(grab));
+      }
+    } else {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jre-'));
+      for (const e of files) await grab(e);
+      const archive = entries.find(e => e.type === 'file' && /\.(tar\.gz|tgz|zip)$/i.test(e.path || ''));
+      if (!archive) throw new Error('Не найден архив JRE в манифесте');
+      const arcPath = path.join(tmpDir, path.basename(archive.path));
+      await extractRuntimeArchive(arcPath, target);
     }
 
-    const archive = entries.find(e => e.type === 'file' && /\.(tar\.gz|tgz|zip)$/i.test(e.path || ''));
-    if (!archive) throw new Error('Не найден архив JRE в манифесте');
-    const arcPath = path.join(tmp, path.basename(archive.path));
-
-    await extractRuntimeArchive(arcPath, target);
-
-    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
     try { fs.chmodSync(javaBin, 0o755); } catch {}
 
     return fs.existsSync(javaBin) ? javaBin : null;
   } catch (e) {
     console.error('[java] mojang runtime failed:', e.message);
     return null;
+  } finally {
+    if (tmpDir) { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} }
   }
 }
 

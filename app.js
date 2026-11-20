@@ -641,8 +641,8 @@ function showInstDetail(inst) {
   $("#homeInstStatus").textContent = "—";
   // кол-во модов в сборке
   if (window.launcher) {
-    launcher.modsInstalled(inst.id).then(mods => {
-      $("#homeInstModsCount").textContent = String(mods.length);
+    launcher.modsInstalled(inst.id).then(r => {
+      $("#homeInstModsCount").textContent = String((r.files || r).length);
     }).catch(() => {});
   }
   window.__activeInstForMenu = inst;
@@ -1088,6 +1088,7 @@ ramSlider.addEventListener("input", updateRam);
 let modSource = "modrinth";        // modrinth | curseforge | installed
 let modResults = [];               // найденные моды
 let installedMods = [];            // скачанные .jar в папке mods
+let installedMeta = [];            // манифест: {source, modId, slug, title, filename}
 let activeModsInstance = null;     // сборка, чьи моды сейчас просматриваем (null = простой режим)
 
 function modsCurrentVersion() {
@@ -1115,7 +1116,7 @@ async function openInstanceMods(inst) {
   $("#modsSearchInput").value = "";
   $("#modsSearchInput").placeholder = "Поиск модов для «" + inst.name + "»…";
   syncModTabs();
-  try { installedMods = await launcher.modsInstalled(inst.id); } catch {}
+  try { ({ files: installedMods, manifest: installedMeta } = await launcher.modsInstalled(inst.id)); } catch {}
   await loadPopularMods();
 }
 
@@ -1161,7 +1162,7 @@ function buildMods(filter = "") {
         const res = await launcher.modsDelete(f, activeModsInstance?.id);
         if (res.ok) {
           toast(`🗑 Мод «${f.replace(/\.jar$/i, "")}» удалён`);
-          installedMods = await launcher.modsInstalled(activeModsInstance?.id);
+          ({ files: installedMods, manifest: installedMeta } = await launcher.modsInstalled(activeModsInstance?.id));
           buildMods(filter);
         } else {
           toast("✖ " + (res.error || "Не удалось удалить"));
@@ -1203,11 +1204,11 @@ function buildMods(filter = "") {
         clickSound(700);
         const loader = $("#modsLoaderSelect")?.value || "any";
         const res = await window.launcher
-          ? launcher.modsDownload({ source: m.source, modId: m.id, gameVersion: modsCurrentVersion(), loader, instanceId: activeModsInstance?.id })
+          ? launcher.modsDownload({ source: m.source, modId: m.id, gameVersion: modsCurrentVersion(), loader, title: m.title || "", slug: m.slug || "", instanceId: activeModsInstance?.id })
           : { ok: false, error: "Доступно в десктопной версии" };
         if (res.ok) {
           toast(`✔ Мод «${m.title}» скачан в mods/`);
-          try { installedMods = await launcher.modsInstalled(activeModsInstance?.id); } catch {}
+          try { ({ files: installedMods, manifest: installedMeta } = await launcher.modsInstalled(activeModsInstance?.id)); } catch {}
           buildMods($("#modsSearchInput")?.value || "");
         } else {
           btn.textContent = "⬇ Скачать";
@@ -1219,8 +1220,11 @@ function buildMods(filter = "") {
     });
 }
 
-/* Мод уже скачан? — сопоставляем slug/название с именами файлов в mods/ */
+/* Мод уже скачан? — сначала точное совпадение по манифесту (modId/slug), затем эвристика по файлам */
 function modIsInstalled(m) {
+  if (installedMeta.some(x =>
+    (m.id && x.modId && String(x.modId) === String(m.id)) ||
+    (m.slug && x.slug && x.slug.toLowerCase() === m.slug.toLowerCase()))) return true;
   const keys = [];
   for (const s of [m.slug, m.title]) {
     if (!s) continue;
@@ -1263,7 +1267,7 @@ function fillModsVersionSelect() {
 
 async function refreshInstalledMods() {
   if (!window.launcher) return;
-  try { installedMods = await launcher.modsInstalled(activeModsInstance?.id); } catch {}
+  try { ({ files: installedMods, manifest: installedMeta } = await launcher.modsInstalled(activeModsInstance?.id)); } catch {}
   if (modSource === "installed") buildMods();
 }
 
