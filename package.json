@@ -1,6 +1,6 @@
 {
   "name": "epic-launcher",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "EPIC Launcher — реальный лаунчер Minecraft Java Edition (Electron): скачивает игру с серверов Mojang и запускает её",
   "main": "main.js",
   "author": "EPIC",
