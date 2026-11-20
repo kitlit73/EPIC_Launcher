@@ -1269,6 +1269,7 @@ async function refreshInstalledMods() {
   if (!window.launcher) return;
   try { ({ files: installedMods, manifest: installedMeta } = await launcher.modsInstalled(activeModsInstance?.id)); } catch {}
   if (modSource === "installed") buildMods();
+  else if (modResults.length) buildMods($("#modsSearchInput")?.value || "");
 }
 
 async function doModSearch() {
@@ -1452,6 +1453,14 @@ window.launcher?.onStatus?.((p) => {
   $("#overlayBar").style.width = p.percent + "%";
   const st = $("#overlayStatus");
   if (st && p.stage) st.textContent = `${p.stage}${speed}${files}`;
+});
+
+// Прогресс скачивания Java (диалог «Скачать Java»)
+window.launcher?.onJavaProgress?.((p) => {
+  const bar = $("#javaBar");
+  if (bar) bar.style.width = Math.max(2, p.pct || 0) + "%";
+  const line = $("#javaStatusLine");
+  if (line) line.textContent = `Скачиваем Java… ${p.pct || 0}%`;
 });
 
 window.launcher?.onLog?.((t) => appendLog(t));
@@ -1656,10 +1665,11 @@ if (window.launcher) {
   loadRealVersions();
   loadInstalledVersions();
   restoreAccount();
-  refreshInstalledMods();
+  // Сначала загружаем список установленных модов, ПОТОМ рисуем популярные —
+  // иначе карточки рисовались до готовности манифеста и сбрасывались в «⬇ Скачать».
+  refreshInstalledMods().then(() => loadPopularMods());
   refreshJavaList();
   fillModsVersionSelect();
-  loadPopularMods();
   launcher.gameDir().then(dir => { const el = $("#setGameDir"); if (el) el.value = dir; }).catch(() => {});
   $("#openDirBtn")?.addEventListener("click", () => launcher.openGameDir());
   // выбор сервера из боковой панели -> автозаполняем IP (пусто = одиночная игра)

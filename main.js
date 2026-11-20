@@ -217,10 +217,13 @@ ipcMain.handle('java:download', async (_e, opts) => {
         major = spec.javaMajor; component = spec.javaComponent || component;
       } catch {}
     }
-    send('game:status', { stage: `Скачивание Java (${component})…`, percent: 5 });
+    // Свой канал прогресса: game:status показал бы оверлей запуска игры,
+    // который оставался на 15% и не закрывался до конца скачивания.
+    send('java:progress', { pct: 0, component });
     const p = await installMojangRuntime(component, RUNTIME_DIR,
-      (d, t) => send('game:status', { stage: `Загрузка Java (${d}/${t})`, percent: 5 + Math.round(d / t * 10) }));
+      (d, t) => send('java:progress', { pct: Math.min(100, Math.round(d / t * 100)), component }));
     if (!p) throw new Error('Не удалось скачать runtime с серверов Mojang');
+    send('java:progress', { pct: 100, component });
     return { ok: true, path: p, major: javaMajorVersion(p), component };
   } catch (e) {
     return { ok: false, error: e.message };

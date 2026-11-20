@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('launcher', {
   onLoaderStatus: (cb) => ipcRenderer.on('loader:status', (_e, p) => cb(p)),
   onModsProgress: (cb) => ipcRenderer.on('mods:progress', (_e, p) => cb(p)),
   onStatus: (cb) => ipcRenderer.on('game:status', (_e, p) => cb(p)),
+  onJavaProgress: (cb) => ipcRenderer.on('java:progress', (_e, p) => cb(p)),
   onLog: (cb) => ipcRenderer.on('game:log', (_e, t) => cb(t)),
   onExit: (cb) => ipcRenderer.on('game:exit', (_e, p) => cb(p)),
 });
