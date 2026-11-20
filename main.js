@@ -240,6 +240,20 @@ ipcMain.handle('java:available', async () => {
   }
 });
 
+// Удалить скачанный Mojang-рантайм (runtime/<component>)
+ipcMain.handle('java:delete', async (_e, opts) => {
+  try {
+    const component = String((opts && opts.component) || '');
+    if (!/^[\w.\-]+$/.test(component)) throw new Error('Некорректный компонент');
+    const dir = path.join(RUNTIME_DIR, component);
+    if (!fs.existsSync(dir)) throw new Error('Рантайм не найден');
+    fs.rmSync(dir, { recursive: true, force: true });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 async function pickUrl(versionId) {
   const list = await getVersionList();
   const v = list.find(x => x.id === versionId);

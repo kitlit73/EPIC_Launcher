@@ -279,13 +279,16 @@ async function loadJavaRuntimes() {
       const inst = rt.installed
         ? '<span class="mod-card__dl">✔ Уже установлена</span>'
         : '<span class="mod-card__dl">' + esc(rt.vendor) + "</span>";
+      const action = rt.installed
+        ? '<button class="mod-toggle is-on" data-jd disabled>✔ Установлена</button><button class="mod-toggle" data-jdel title="Удалить рантайм с диска">🗑 Удалить</button>'
+        : '<button class="mod-toggle" data-jd>⬇ Скачать</button>';
       card.innerHTML = `
         <div class="mod-card__icon">☕</div>
         <div class="mod-card__name">Java ${esc(String(rt.major ?? "?"))}</div>
         <div class="mod-card__desc">${esc(rt.version)} • ${esc(rt.component)}</div>
         <div class="mod-card__foot">
           ${inst}
-          <button class="mod-toggle" data-jd ${rt.installed ? "disabled" : ""}>${rt.installed ? "✔ Установлена" : "⬇ Скачать"}</button>
+          ${action}
         </div>`;
       card.querySelector("[data-jd]").addEventListener("click", async e => {
         if (rt.installed) return;
@@ -298,19 +301,35 @@ async function loadJavaRuntimes() {
         $("#javaStatusLine").textContent = `Скачиваем Java ${rt.version}…`;
         const res = await launcher.downloadJava({ component: rt.component });
         if (res.ok) {
-          btn.textContent = "✔ Установлена";
           $("#javaStatusLine").textContent = `✔ Java ${res.major} (${rt.component}) установлена`;
           if (prog) prog.style.width = "100%";
           toast(`✔ Java ${res.major} установлена`);
-          rt.installed = true;
           await refreshJavaList();
+          await loadJavaRuntimes();
           if (menuInstance) fillInstMenuJava(menuInstance);
-          if (typeof showInstDetail === "function" && window.__activeInstForMenu) showInstDetail(window.__activeInstForMenu);
         } else {
           btn.disabled = false;
           btn.textContent = "⬇ Скачать";
           $("#javaStatusLine").textContent = "✖ " + (res.error || "Ошибка") + " — попробуйте ещё раз";
           toast("✖ " + (res.error || "Не удалось скачать Java"), 5000);
+        }
+      });
+      card.querySelector("[data-jdel]")?.addEventListener("click", async e => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.textContent = "⏳ …";
+        clickSound(500);
+        const res = await launcher.deleteJava({ component: rt.component });
+        if (res.ok) {
+          $("#javaStatusLine").textContent = `🗑 Java ${rt.version} (${rt.component}) удалена`;
+          toast(`🗑 Java ${rt.version} удалена`);
+          await refreshJavaList();
+          await loadJavaRuntimes();
+          if (menuInstance) fillInstMenuJava(menuInstance);
+        } else {
+          btn.disabled = false;
+          btn.textContent = "🗑 Удалить";
+          toast("✖ " + (res.error || "Не удалось удалить"), 5000);
         }
       });
       list.appendChild(card);
@@ -1203,9 +1222,11 @@ function buildMods(filter = "") {
         btn.disabled = true;
         clickSound(700);
         const loader = $("#modsLoaderSelect")?.value || "any";
-        const res = await window.launcher
+        // ВАЖНО: await должен покрывать весь тернарник — иначе res = Promise
+        // («{}»), скачивание проходит, но карточка показывает «✖ Не удалось скачать».
+        const res = await (window.launcher
           ? launcher.modsDownload({ source: m.source, modId: m.id, gameVersion: modsCurrentVersion(), loader, title: m.title || "", slug: m.slug || "", instanceId: activeModsInstance?.id })
-          : { ok: false, error: "Доступно в десктопной версии" };
+          : Promise.resolve({ ok: false, error: "Доступно в десктопной версии" }));
         if (res.ok) {
           toast(`✔ Мод «${m.title}» скачан в mods/`);
           try { ({ files: installedMods, manifest: installedMeta } = await launcher.modsInstalled(activeModsInstance?.id)); } catch {}
