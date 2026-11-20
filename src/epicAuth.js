@@ -19,7 +19,7 @@ const fs = require('fs');
 const path = require('path');
 const { smartFetch } = require('./net');
 
-const DEFAULT_API_URL = 'https://epic-launcher-server.onrender.com';
+const DEFAULT_API_URL = 'https://epic-launcher-server.relaxdev.ru';
 
 // Читаем EPIC_API_URL из корневого .env (если задан) — так же, как раньше
 // читался DATABASE_URL. Значение в .env перекрывает дефолт, переменная
