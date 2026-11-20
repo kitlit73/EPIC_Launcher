@@ -9,10 +9,18 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 const AdmZip = require('adm-zip');
-const { fetchJson } = require('./manifest');
+const { smartFetch } = require('./net');
 
 const RUNTIME_INDEX_URL = 'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
 let indexCache = null;
+
+// smartFetch + стрим: undici-_fetch без прокси и с arrayBuffer() падает на
+// CDN Mojang так же, как падал на maven.neoforged.net ("fetch failed").
+async function fetchJsonSafe(url) {
+  const res = await smartFetch(url, { headers: { 'User-Agent': 'epic-launcher/1.0.0' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
+  return res.json();
+}
 
 function mojangOs() {
   switch (process.platform) {
@@ -23,8 +31,37 @@ function mojangOs() {
 }
 
 async function getRuntimeIndex() {
-  if (!indexCache) indexCache = await fetchJson(RUNTIME_INDEX_URL);
+  if (!indexCache) indexCache = await fetchJsonSafe(RUNTIME_INDEX_URL);
   return indexCache;
+}
+
+/**
+ * Все доступные для скачивания официальные рантаймы Mojang (для диалога выбора).
+ * Отмечает уже установленные (runtimeDir/<component>/bin/java.exe существует).
+ */
+async function listAvailableRuntimes(runtimeDir) {
+  const idx = await getRuntimeIndex();
+  const osKey = mojangOs();
+  const comps = idx[osKey] || {};
+  const out = [];
+  for (const component of Object.keys(comps)) {
+    const list = comps[component];
+    if (!list || !list.length) continue;
+    const first = list[0];
+    const name = (first.version && first.version.name) || '';
+    const m = /(\d+)(?:\.(\d+))?/.exec(name);
+    let major = m ? parseInt(m[1], 10) : null;
+    if (major === 1 && m && m[2]) major = parseInt(m[2], 10);
+    out.push({
+      component,
+      version: name || component,
+      major,
+      vendor: first.vendor || 'Mojang',
+      installed: fs.existsSync(path.join(runtimeDir, component, 'bin', exe())),
+    });
+  }
+  out.sort((a, b) => (a.major || 0) - (b.major || 0) || a.component.localeCompare(b.component));
+  return out;
 }
 
 /** Download + extract an official Mojang JRE into runtimes/<component>. Returns java bin path or null. */
@@ -47,11 +84,14 @@ async function installMojangRuntime(component, runtimeDir, onProgress) {
     let done = 0;
     for (const e of entries) {
       if (!e.url || e.type !== 'file') continue;
-      const res = await fetch(e.url);
-      if (!res.ok) throw new Error(`JRE HTTP ${res.status}`);
-      const buf = Buffer.from(await res.arrayBuffer());
+      // СТРИМ в файл: arrayBuffer() на CDN Mojang обрывается ("fetch failed"),
+      // из-за чего установка Java раньше не проходила.
       const local = path.join(tmp, path.basename(e.path));
-      fs.writeFileSync(local, buf);
+      const res2 = await smartFetch(e.url, { headers: { 'User-Agent': 'epic-launcher/1.0.0' } });
+      if (!res2.ok) throw new Error(`JRE HTTP ${res2.status}`);
+      const ws = fs.createWriteStream(local);
+      for await (const chunk of res2.body) ws.write(chunk);
+      await new Promise(r => ws.end(r));
       done++;
       if (onProgress) onProgress(done, entries.length, e.path);
     }
@@ -232,4 +272,4 @@ async function resolveJava(spec, runtimeDir, onProgress, manualPath) {
   throw new Error(`Java ${need}+ не найдена и не скачалась. Установите JRE или проверьте интернет.`);
 }
 
-module.exports = { resolveJava, installMojangRuntime, findSystemJava, listInstalledJava, javaMajorVersion };
+module.exports = { resolveJava, installMojangRuntime, findSystemJava, listInstalledJava, listAvailableRuntimes, javaMajorVersion };

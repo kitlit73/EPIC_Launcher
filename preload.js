@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('launcher', {
   launch: (opts) => ipcRenderer.invoke('game:launch', opts),
   killGame: () => ipcRenderer.invoke('game:kill'),
   javaList: () => ipcRenderer.invoke('java:list'),
+  javaAvailable: () => ipcRenderer.invoke('java:available'),
   downloadJava: (opts) => ipcRenderer.invoke('java:download', opts),
   openGameDir: (instanceId) => ipcRenderer.invoke('paths:open', instanceId),
   gameDir: (instanceId) => ipcRenderer.invoke('paths:gameDir', instanceId),

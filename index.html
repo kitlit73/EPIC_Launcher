@@ -63,7 +63,7 @@
           <div class="news-card__title" id="newsTitle">Minecraft 1.21 — Tricky Trials</div>
           <div class="news-card__dots" id="newsDots"></div>
         </div>
-        <div class="version-label">v1.0.1 • EPIC Launcher</div>
+        <div class="version-label">v1.0.2 • EPIC Launcher</div>
       </div>
     </aside>
 
@@ -274,6 +274,22 @@
           </div>
         </div>
 
+        <!-- Диалог скачивания Java: выбор рантайма -->
+        <div class="instance-dialog is-hidden" id="javaDialog">
+          <div class="instance-dialog__box catalog-box card">
+            <div class="instance-dialog__head">
+              <b>⬇ Скачать Java</b>
+              <button class="btn btn--ghost btn--sm" id="javaDialogClose">✕</button>
+            </div>
+            <div class="mods-search__hint">Официальные рантаймы Mojang. Нужную версию обычно лаунчер подбирает сам — здесь можно установить любую вручную.</div>
+            <div class="java-runtime-list" id="javaRuntimeList"></div>
+            <div class="catalog-foot">
+              <div class="catalog-bar loading-bar"><div class="loading-bar__fill" id="javaBar"></div></div>
+              <div class="loaders__status" id="javaStatusLine">—</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Каталог сборок: Modrinth / FTB / импорт .mrpack -->
         <div class="instance-dialog is-hidden" id="catalogDialog">
           <div class="instance-dialog__box catalog-box card">
@@ -328,6 +344,12 @@
                   <div class="slider-marks"><span>1G</span><span>4G</span><span>8G</span><span>12G</span><span>16G</span></div>
                 </div>
                 <div class="setting"><div><b>Аргументы JVM</b><p>Дополнительные параметры запуска</p></div><input class="input input--jvm" id="instMenuJvm" value="-XX:+UseG1GC -Dfile.encoding=UTF-8"/></div>
+                <div class="setting"><div><b>Java для этой сборки</b><p>Свой путь к Java (иначе — общая из настроек)</p></div>
+                  <div class="java-row">
+                    <select class="input input--select" id="instMenuJava"><option value="auto">🪄 Автоматически</option></select>
+                    <button class="btn btn--ghost btn--sm" id="instMenuJavaDl">⬇</button>
+                  </div>
+                </div>
                 <div class="setting"><div><b>Сервер для быстрого входа</b><p>IP сервера (пусто — одиночная игра)</p></div><input class="input input--jvm" id="instMenuServer" spellcheck="false"/></div>
                 <div class="setting"><div><b>Полноэкранный режим</b><p>Запускать на весь экран</p></div><label class="switch"><input type="checkbox" id="instMenuFullscreen"/><span class="switch__track"></span></label></div>
                 <div class="inst-menu__actions">

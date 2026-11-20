@@ -209,18 +209,31 @@ ipcMain.handle('java:list', async () => {
 ipcMain.handle('java:download', async (_e, opts) => {
   const { installMojangRuntime, javaMajorVersion } = require('./src/java');
   try {
-    let major = null, component = 'java-runtime-delta';
-    try {
-      const spec = await resolveSpec(opts.versionUrl || null, opts.versionId);
-      major = spec.javaMajor; component = spec.javaComponent || component;
-    } catch {}
-    send('game:status', { stage: 'Скачивание Java…', percent: 5 });
+    let major = null, component = (opts && opts.component) || 'java-runtime-delta';
+    // Без явного компонента — подбираем по версии игры (как раньше).
+    if (!opts || !opts.component) {
+      try {
+        const spec = await resolveSpec(opts.versionUrl || null, opts.versionId);
+        major = spec.javaMajor; component = spec.javaComponent || component;
+      } catch {}
+    }
+    send('game:status', { stage: `Скачивание Java (${component})…`, percent: 5 });
     const p = await installMojangRuntime(component, RUNTIME_DIR,
       (d, t) => send('game:status', { stage: `Загрузка Java (${d}/${t})`, percent: 5 + Math.round(d / t * 10) }));
     if (!p) throw new Error('Не удалось скачать runtime с серверов Mojang');
-    return { ok: true, path: p, major: javaMajorVersion(p) };
+    return { ok: true, path: p, major: javaMajorVersion(p), component };
   } catch (e) {
     return { ok: false, error: e.message };
+  }
+});
+
+// Список доступных для скачивания рантаймов Mojang (для диалога выбора Java).
+ipcMain.handle('java:available', async () => {
+  try {
+    const { listAvailableRuntimes } = require('./src/java');
+    return { ok: true, runtimes: await listAvailableRuntimes(RUNTIME_DIR) };
+  } catch (e) {
+    return { ok: false, error: e.message, runtimes: [] };
   }
 });
 

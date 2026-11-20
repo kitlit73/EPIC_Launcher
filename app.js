@@ -242,14 +242,84 @@ $("#javaSelect")?.addEventListener("change", () => {
 });
 
 $("#dlJavaBtn")?.addEventListener("click", async () => {
-  if (!window.launcher) return toast("⚠ Скачивание Java доступно в десктопной версии");
   clickSound(700);
-  const cur = currentVersionObj();
-  toast("⬇ Скачиваем официальную Java от Mojang…");
-  const res = await launcher.downloadJava({ versionUrl: cur?.url || null, versionId: cur?.id || "1.21.4" });
-  if (res.ok) { toast(`✔ Java ${res.major} установлена`); await refreshJavaList(); }
-  else toast("✖ " + (res.error || "Не удалось скачать Java"));
+  openJavaDialog();
 });
+
+$("#instMenuJavaDl")?.addEventListener("click", () => { clickSound(700); openJavaDialog(); });
+
+/* ---------- Диалог «Скачать Java» (выбор рантайма) ---------- */
+let javaRuntimes = [];
+
+function openJavaDialog() {
+  const dlg = $("#javaDialog");
+  if (!dlg) return;
+  dlg.classList.remove("is-hidden");
+  $("#javaStatusLine").textContent = "Загружаем список рантаймов…";
+  loadJavaRuntimes();
+}
+
+function closeJavaDialog() { $("#javaDialog")?.classList.add("is-hidden"); }
+
+$("#javaDialogClose")?.addEventListener("click", () => { clickSound(500); closeJavaDialog(); });
+$("#javaDialog")?.addEventListener("click", e => { if (e.target === e.currentTarget) closeJavaDialog(); });
+
+async function loadJavaRuntimes() {
+  if (!window.launcher) return;
+  try {
+    const res = await launcher.javaAvailable();
+    if (!res.ok) { $("#javaStatusLine").textContent = "✖ " + (res.error || "Ошибка"); return; }
+    javaRuntimes = res.runtimes || [];
+    const list = $("#javaRuntimeList");
+    list.innerHTML = "";
+    if (!javaRuntimes.length) { list.innerHTML = '<div class="ver-empty">Рантаймы не найдены — проверьте интернет.</div>'; return; }
+    for (const rt of javaRuntimes) {
+      const card = document.createElement("div");
+      card.className = "mod-card java-runtime-card";
+      const inst = rt.installed
+        ? '<span class="mod-card__dl">✔ Уже установлена</span>'
+        : '<span class="mod-card__dl">' + esc(rt.vendor) + "</span>";
+      card.innerHTML = `
+        <div class="mod-card__icon">☕</div>
+        <div class="mod-card__name">Java ${esc(String(rt.major ?? "?"))}</div>
+        <div class="mod-card__desc">${esc(rt.version)} • ${esc(rt.component)}</div>
+        <div class="mod-card__foot">
+          ${inst}
+          <button class="mod-toggle" data-jd ${rt.installed ? "disabled" : ""}>${rt.installed ? "✔ Установлена" : "⬇ Скачать"}</button>
+        </div>`;
+      card.querySelector("[data-jd]").addEventListener("click", async e => {
+        if (rt.installed) return;
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        btn.textContent = "⏳ …";
+        clickSound(700);
+        const prog = $("#javaBar");
+        if (prog) prog.style.width = "0%";
+        $("#javaStatusLine").textContent = `Скачиваем Java ${rt.version}…`;
+        const res = await launcher.downloadJava({ component: rt.component });
+        if (res.ok) {
+          btn.textContent = "✔ Установлена";
+          $("#javaStatusLine").textContent = `✔ Java ${res.major} (${rt.component}) установлена`;
+          if (prog) prog.style.width = "100%";
+          toast(`✔ Java ${res.major} установлена`);
+          rt.installed = true;
+          await refreshJavaList();
+          if (menuInstance) fillInstMenuJava(menuInstance);
+          if (typeof showInstDetail === "function" && window.__activeInstForMenu) showInstDetail(window.__activeInstForMenu);
+        } else {
+          btn.disabled = false;
+          btn.textContent = "⬇ Скачать";
+          $("#javaStatusLine").textContent = "✖ " + (res.error || "Ошибка") + " — попробуйте ещё раз";
+          toast("✖ " + (res.error || "Не удалось скачать Java"), 5000);
+        }
+      });
+      list.appendChild(card);
+    }
+    $("#javaStatusLine").textContent = "Выберите версию и нажмите «Скачать».";
+  } catch (e) {
+    $("#javaStatusLine").textContent = "✖ " + (e.message || "Ошибка");
+  }
+}
 
 /* ---------- Навигация ---------- */
 $$(".nav__item").forEach(btn => btn.addEventListener("click", () => {
@@ -445,8 +515,26 @@ async function refreshInstanceMenu() {
   $("#instMenuRam").value = inst.ramGB || 4;
   updateInstMenuRam();
   $("#instMenuJvm").value = inst.extraJvm || "";
+  fillInstMenuJava(inst);
   $("#instMenuServer").value = inst.serverIp || "";
   $("#instMenuFullscreen").checked = !!inst.fullscreen;
+}
+
+/* Селект «Java для этой сборки»: авто + установленные рантаймы/системные */
+function fillInstMenuJava(inst) {
+  const sel = $("#instMenuJava");
+  if (!sel) return;
+  const cur = inst?.javaPath || "auto";
+  const opts = ['<option value="auto">🪄 Автоматически</option>'];
+  for (const j of JAVA_LIST) {
+    const label = `Java ${j.major}${j.vendor ? " • " + j.vendor : ""}`;
+    opts.push(`<option value="${esc(j.path)}">${esc(label)}</option>`);
+  }
+  if (cur !== "auto" && !JAVA_LIST.some(j => j.path === cur)) {
+    opts.push(`<option value="${esc(cur)}">${esc(cur)}</option>`);
+  }
+  sel.innerHTML = opts.join("");
+  sel.value = cur;
 }
 
 function updateInstMenuRam() {
@@ -466,6 +554,7 @@ $("#instMenuSaveSettings")?.addEventListener("click", async () => {
     id: menuInstance.id,
     ramGB: +$("#instMenuRam").value,
     extraJvm: $("#instMenuJvm").value,
+    javaPath: $("#instMenuJava")?.value && $("#instMenuJava").value !== "auto" ? $("#instMenuJava").value : null,
     serverIp: $("#instMenuServer").value.trim(),
     fullscreen: $("#instMenuFullscreen").checked,
   });
@@ -1098,13 +1187,14 @@ function buildMods(filter = "") {
       const icon = m.iconUrl
         ? `<img class="mod-card__icon mod-card__icon--img" src="${esc(m.iconUrl)}" alt="" draggable="false" loading="lazy"/>`
         : '<div class="mod-card__icon">🧩</div>';
+      const isInst = modIsInstalled(m);
       card.innerHTML = `
         ${icon}
         <div class="mod-card__name">${esc(m.title || m.slug)}</div>
         <div class="mod-card__desc">${esc((m.description || "").slice(0, 120))}${loaderTags}</div>
         <div class="mod-card__foot">
           <span class="mod-card__dl">${dl}</span>
-          <button class="mod-toggle" data-dl>⬇ Скачать</button>
+          <button class="mod-toggle${isInst ? " is-on" : ""}" data-dl${isInst ? " disabled" : ""}>${isInst ? "✔ Установлен" : "⬇ Скачать"}</button>
         </div>`;
       card.querySelector("[data-dl]").addEventListener("click", async e => {
         const btn = e.currentTarget;
@@ -1116,17 +1206,31 @@ function buildMods(filter = "") {
           ? launcher.modsDownload({ source: m.source, modId: m.id, gameVersion: modsCurrentVersion(), loader, instanceId: activeModsInstance?.id })
           : { ok: false, error: "Доступно в десктопной версии" };
         if (res.ok) {
-          btn.textContent = "✔ Скачан";
-          installedMods = await launcher.modsInstalled(activeModsInstance?.id);
           toast(`✔ Мод «${m.title}» скачан в mods/`);
+          try { installedMods = await launcher.modsInstalled(activeModsInstance?.id); } catch {}
+          buildMods($("#modsSearchInput")?.value || "");
         } else {
           btn.textContent = "⬇ Скачать";
+          btn.disabled = false;
           toast("✖ " + (res.error || "Не удалось скачать"), 4200);
         }
-        btn.disabled = false;
       });
       grid.appendChild(card);
     });
+}
+
+/* Мод уже скачан? — сопоставляем slug/название с именами файлов в mods/ */
+function modIsInstalled(m) {
+  const keys = [];
+  for (const s of [m.slug, m.title]) {
+    if (!s) continue;
+    const low = s.toLowerCase();
+    keys.push(low.replace(/\s+/g, "-"), low.replace(/\s+/g, ""));
+  }
+  return installedMods.some(f => {
+    const n = f.toLowerCase();
+    return keys.some(k => k.length > 2 && n.includes(k));
+  });
 }
 
 async function loadPopularMods() {
@@ -1451,7 +1555,8 @@ async function startLaunch({ instance } = {}) {
     serverIp: (instance && instance.serverIp != null
       ? String(instance.serverIp)
       : ($("#setServerIp")?.value || "")).trim() || null,
-    javaPath: $("#javaSelect")?.value !== "auto" ? $("#javaSelect").value : null,
+    // Java конкретной сборки (instMenuJava) приоритетнее общей из настроек
+    javaPath: (instance && instance.javaPath) || ($("#javaSelect")?.value !== "auto" ? $("#javaSelect").value : null),
     instanceId,
   };
   if (!opts.versionUrl) {

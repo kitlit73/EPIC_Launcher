@@ -1039,6 +1039,10 @@ body[data-bg="night"] .ground {
 .catalog-foot { display: flex; flex-direction: column; gap: 6px; }
 .catalog-bar { width: 100%; height: 8px; }
 .pack-card .mod-card__icon--img { border-radius: 14px; }
+
+/* Диалог «Скачать Java»: список официальных рантаймов Mojang */
+.java-runtime-list { max-height: 40vh; overflow: auto; padding-right: 4px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.java-runtime-card .mod-card__desc { min-height: 0; margin: 6px 0 10px; }
 .instance-dialog__head { display: flex; align-items: center; justify-content: space-between; }
 .instance-dialog__foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .inst-icons { display: flex; gap: 8px; flex-wrap: wrap; }
