@@ -29,11 +29,12 @@ async function downloadOne(url, dest, expectedSha, onBytes) {
   const tmp = dest + '.part';
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
+  const total = +(res.headers.get('content-length') || 0);
   const ws = fs.createWriteStream(tmp);
   try {
     for await (const chunk of res.body) {
       ws.write(chunk);
-      if (onBytes) onBytes(chunk.length);
+      if (onBytes) onBytes(chunk.length, total);
     }
   } finally {
     ws.end();
@@ -67,9 +68,13 @@ async function pool(items, worker, concurrency = CONCURRENCY) {
 }
 
 class Downloader {
-  constructor(gameDir, emit) {
-    this.dir = gameDir; // .minecraft
+  constructor(gameDir, emit, opts = {}) {
+    this.dir = gameDir; // .minecraft (instance)
     this.emit = emit || (() => {});
+    // Prism-style: libraries/ и assets/ могут быть общими для всех сборок,
+    // а versions/ и моды/конфиги — изолированы в директории конкретной сборки.
+    this.libsDir = opts.libsDir || path.join(gameDir, 'libraries');
+    this.assetsDir = opts.assetsDir || path.join(gameDir, 'assets');
   }
 
   /** Download a queue of {url, sha1, size, path(rel)} into baseDir. */
@@ -93,7 +98,7 @@ class Downloader {
 
     try {
       await pool(todo, async t => {
-        await downloadOne(t.url, path.join(baseDir, t.path), t.sha1, b => { doneBytes += b; });
+        await downloadOne(t.url, path.join(baseDir, t.path), t.sha1, (b) => { doneBytes += b; });
         doneFiles++;
       });
     } finally {
@@ -106,16 +111,27 @@ class Downloader {
   /** spec -> everything needed on disk. Returns paths for launch. */
   async install(spec, onStage) {
     const vdir = ensureDir(path.join(this.dir, 'versions', spec.id));
-    const libsDir = ensureDir(path.join(this.dir, 'libraries'));
+    const libsDir = ensureDir(this.libsDir);
     const nativesDir = ensureDir(path.join(vdir, `natives-${process.platform}`));
-    const assetsDir = ensureDir(path.join(this.dir, 'assets'));
+    const assetsDir = ensureDir(this.assetsDir);
 
     // 1. version jar
     const clientJar = path.join(vdir, `${spec.id}.jar`);
     if (!fs.existsSync(clientJar)) {
       onStage('Загрузка ядра игры…');
+      const clientTotal = spec.client.size || 0;
+      let clientDone = 0;
       await downloadOne(spec.client.url, clientJar, spec.client.sha1,
-        b => this.emit({ stage: 'Ядро игры', bytes: b }));
+        (bytes, total) => {
+          clientDone += bytes;
+          const t = total || clientTotal || 1;
+          this.emit({
+            stage: 'Ядро игры',
+            percent: Math.min(99, Math.round(clientDone / t * 100)),
+            filesDone: 1, filesTotal: 1,
+            speed: undefined,
+          });
+        });
     }
 
     // 2. libraries (+ natives)

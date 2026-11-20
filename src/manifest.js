@@ -6,26 +6,63 @@
  * version.json + mainConfig.json).
  */
 
+const fs = require('fs');
 const META_BASE = 'https://piston-meta.mojang.com';
 
-async function fetchJson(url, tries = 4) {
+// Optional disk cache for the version manifest (set from main.js).
+let versionCacheFile = null;
+let cachedVersions = null;
+let cachedVersionsAt = 0;
+function setVersionCacheFile(p) { versionCacheFile = p; }
+const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+async function fetchJson(url, tries = 2, timeoutMs = 6000) {
   let lastErr;
   for (let i = 0; i < tries; i++) {
     try {
-      const res = await fetch(url);
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      let res;
+      try {
+        res = await fetch(url, { signal: ctrl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
       return await res.json();
     } catch (e) {
       lastErr = e;
-      await new Promise(r => setTimeout(r, 400 * Math.pow(2, i)));
+      await new Promise(r => setTimeout(r, 300 * (i + 1)));
     }
   }
   throw lastErr;
 }
 
 async function getVersionList() {
+  // Serve from memory cache for fast repeat calls (e.g. inheritsFrom lookups).
+  if (cachedVersions && Date.now() - cachedVersionsAt < CACHE_TTL) return cachedVersions;
+  // Serve from disk cache if fresh — makes startup fast without network.
+  if (versionCacheFile && fs.existsSync(versionCacheFile)) {
+    try {
+      const stat = fs.statSync(versionCacheFile);
+      if (Date.now() - stat.mtimeMs < CACHE_TTL) {
+        const cached = JSON.parse(fs.readFileSync(versionCacheFile, 'utf8'));
+        cachedVersions = cached.versions;
+        cachedVersionsAt = Date.now();
+        return cachedVersions;
+      }
+    } catch {}
+  }
   const data = await fetchJson(`${META_BASE}/mc/game/version_manifest_v2.json`);
-  return data.versions; // [{id,type,url,time,releaseTime}]
+  cachedVersions = data.versions;
+  cachedVersionsAt = Date.now();
+  if (versionCacheFile) {
+    try {
+      fs.mkdirSync(require('path').dirname(versionCacheFile), { recursive: true });
+      fs.writeFileSync(versionCacheFile, JSON.stringify(data));
+    } catch {}
+  }
+  return cachedVersions; // [{id,type,url,time,releaseTime}]
 }
 
 /** Resolve inheritsFrom chains (mods/snapshots pointing at a release). */
@@ -62,10 +99,40 @@ function mergeArgs(a, b) {
 /**
  * Build a normalized spec from a resolved manifest.
  * If manifest.mainConfig exists (new 2026 format), fetch and merge it.
+ * `features` controls demo/custom-resolution/quick-play args (see allowByRules).
  */
-async function buildSpec(manifestUrl) {
-  let m = await resolveManifest(manifestUrl);
+async function buildSpec(manifestUrl, features) {
+  const m = await resolveManifest(manifestUrl);
+  return normalizeSpec(m, features);
+}
 
+/**
+ * Build a spec from a locally installed version.json (e.g. Fabric/Forge
+ * installed into .minecraft/versions/<id>/<id>.json). The file may inherit
+ * from a vanilla version, which is resolved via piston-meta.
+ */
+async function buildSpecFromFile(jsonPath, features) {
+  const local = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+  if (local.inheritsFrom) {
+    const list = await getVersionList();
+    const parent = list.find(v => v.id === local.inheritsFrom);
+    if (!parent) throw new Error(`Родительская версия не найдена: ${local.inheritsFrom}`);
+    const pm = await resolveManifest(parent.url);
+    return normalizeSpec(mergeInherit(pm, local), features);
+  }
+  return normalizeSpec(local, features);
+}
+
+function mergeInherit(parent, child) {
+  return {
+    ...parent,
+    ...child,
+    libraries: [...(parent.libraries || []), ...(child.libraries || [])],
+    arguments: mergeArgs(parent.arguments, child.arguments),
+  };
+}
+
+async function normalizeSpec(m, features) {
   if (m.mainConfig && typeof m.mainConfig === 'object' && m.mainConfig.url) {
     const cfg = await fetchJson(m.mainConfig.url);
     m = deepMerge(cfg, m); // manifest fields win, config supplies libraries/args/downloads
@@ -75,7 +142,7 @@ async function buildSpec(manifestUrl) {
   const arch = process.arch === 'arm64' ? 'arm64' : 'x86';
 
   const libraries = (m.libraries || [])
-    .filter(lib => allowByRules(lib.rules, osName, arch))
+    .filter(lib => allowByRules(lib.rules, osName, arch, features))
     .map(lib => parseLibrary(lib, osName, arch))
     .filter(Boolean);
 
@@ -90,10 +157,10 @@ async function buildSpec(manifestUrl) {
 
   let argsGame, argsJvm;
   if (m.arguments && !Array.isArray(m.arguments) && (m.arguments.game || m.arguments.jvm)) {
-    argsGame = flatSelect(m.arguments.game, osName, arch);
-    argsJvm = flatSelect(m.arguments.jvm, osName, arch);
+    argsGame = flatSelect(m.arguments.game, osName, arch, features);
+    argsJvm = flatSelect(m.arguments.jvm, osName, arch, features);
   } else if (Array.isArray(m.arguments)) {
-    argsGame = flatSelect(m.arguments, osName, arch);
+    argsGame = flatSelect(m.arguments, osName, arch, features);
     argsJvm = defaultJvmArgs();
   } else if (m.minecraftArguments) {
     argsGame = m.minecraftArguments.split(/\s+/);
@@ -147,11 +214,15 @@ function platformName() {
   }
 }
 
-function allowByRules(rules, osName, arch) {
+function allowByRules(rules, osName, arch, features) {
   if (!rules || !rules.length) return true;
   let allowed = false;
   for (const rule of rules) {
-    const match = rule.os ? ruleMatch(rule.os, osName, arch) : true;
+    const osMatch = rule.os ? ruleMatch(rule.os, osName, arch) : true;
+    const featMatch = !rule.features
+      ? true
+      : Object.entries(rule.features).every(([k, v]) => !!((features || {})[k]) === !!v);
+    const match = osMatch && featMatch;
     if (rule.action === 'allow') { if (match) allowed = true; }
     else if (rule.action === 'disallow') { if (match) return false; }
   }
@@ -168,12 +239,12 @@ function ruleMatch(os, osName, arch) {
 }
 
 /** Expand conditional argument arrays into a flat list for this OS. */
-function flatSelect(arr, osName, arch) {
+function flatSelect(arr, osName, arch, features) {
   const out = [];
   for (const item of arr || []) {
     if (typeof item === 'string') { out.push(item); continue; }
     if (isObj(item) && item.rules) {
-      if (allowByRules(item.rules, osName, arch)) {
+      if (allowByRules(item.rules, osName, arch, features)) {
         const vals = item.value !== undefined ? item.value : item.values;
         if (typeof vals === 'string') out.push(vals);
         else if (Array.isArray(vals)) out.push(...vals.filter(v => typeof v === 'string'));
@@ -217,4 +288,4 @@ function parseLibrary(lib, osName, arch) {
   return entry;
 }
 
-module.exports = { fetchJson, getVersionList, resolveManifest, buildSpec, coordToPath, platformName };
+module.exports = { fetchJson, getVersionList, resolveManifest, buildSpec, buildSpecFromFile, coordToPath, platformName, setVersionCacheFile };

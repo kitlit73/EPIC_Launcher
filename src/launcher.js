@@ -17,8 +17,17 @@ function isLegacy(versionId) {
 }
 
 function buildArgs(spec, paths, opts) {
-  const { auth, gameDir, javaPath, ramGB, extraJvm = '', fullscreen, serverIp } = opts;
+  const { auth, gameDir, javaPath, ramGB, extraJvm = '', fullscreen } = opts;
+  // Адрес сервера для быстрого входа: "host", "host:port" (порт уже разрешён в main).
+  let serverIp = opts.serverIp || '';
+  let serverPort = opts.serverPort || null;
+  const hp = String(serverIp).match(/^(.+):(\d+)$/);
+  if (hp && !serverPort) { serverIp = hp[1]; serverPort = parseInt(hp[2], 10); }
+  serverIp = serverIp || null;
   const assetsRoot = paths.assetsDir;
+  // В простом режиме библиотеки лежат в <gameDir>/libraries; в продвинутом
+  // (сборки) — в общей папке libraries корневого .minecraft.
+  const librariesDir = opts.librariesDir || path.join(gameDir, 'libraries');
   const virtualAssetDir = path.join(assetsRoot, 'virtual', spec.assets);
   const useVirtual = fs.existsSync(virtualAssetDir);
 
@@ -41,8 +50,10 @@ function buildArgs(spec, paths, opts) {
     '${auth_session}': auth.token,
     '${launch_target}': spec.launchTarget || 'client',
     '${natives_directory}': paths.nativesDir,
+    '${library_directory}': librariesDir,
     '${launcher_name}': 'epic-launcher',
     '${launcher_version}': '2.0.0',
+    '${clientid}': auth.clientId || '00000000-0000-0000-0000-000000000000',
     '${classpath_separator}': process.platform === 'win32' ? ';' : ':',
     '${library_path}': paths.classpath.join(process.platform === 'win32' ? ';' : ':'),
     '${version_type}': spec.type,
@@ -51,7 +62,10 @@ function buildArgs(spec, paths, opts) {
     '${icon}': '',
     '${quickPlayPath}': '',
     '${quickPlaySingleplayer}': '',
-    '${quickPlayMultiplayer}': serverIp || '',
+    // Новые клиенты (1.20+/26.x) автоподключаются ТОЛЬКО через
+    // --quickPlayMultiplayer "host:port" (классические --server/--port они
+    // игнорируют). Активируется фичей is_quick_play_multiplayer в main.js.
+    '${quickPlayMultiplayer}': serverIp ? (serverPort ? `${serverIp}:${serverPort}` : serverIp) : '',
     '${quickPlayRealms}': '',
     '${log4j_config}': paths.log4jPath || '',
     '${classpath}': paths.classpath.join(process.platform === 'win32' ? ';' : ':'),
@@ -120,7 +134,14 @@ function buildArgs(spec, paths, opts) {
   }
 
   if (fullscreen) game.push('--fullscreen');
-  if (serverIp) game.push('--server', serverIp, '--port', '25565');
+  // Современные версии: подключение через --quickPlayMultiplayer (токен уже в
+  // аргументах манифеста — включается фичей is_quick_play_multiplayer в main.js).
+  // Старые версии (без quick play в манифесте) — классические --server/--port.
+  // Порт берётся из SRV-записи (см. resolveAddress в serverping.js) — у серверов
+  // с нестандартным портом (не 25565) без этого быстрый вход не работает.
+  if (serverIp && !game.includes('--quickPlayMultiplayer')) {
+    game.push('--server', serverIp, '--port', String(serverPort || 25565));
+  }
 
   // If the version's own argsJvm already carries -cp / classpath (modern format),
   // don't append another one.

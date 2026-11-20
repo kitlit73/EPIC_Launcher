@@ -9,6 +9,12 @@
 const fs = require('fs');
 const path = require('path');
 
+// safeStorage есть только в main-процессе Electron (на Windows — DPAPI).
+// При require вне Electron ('electron' вернёт строку-путь) получим undefined —
+// тогда шифрование пропускается.
+let safeStorage = null;
+try { ({ safeStorage } = require('electron')); } catch { /* не в Electron */ }
+
 const CLIENT_ID = 'e118ac46-24bb-4ba1-94c1-ee25aabc9302'; // official vanilla launcher client id
 const AUTH_URL = `https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A1066&scope=XboxLive.signin%20offline_access`;
 const TOKEN_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token';
@@ -31,9 +37,48 @@ async function jsonFetch(url, opts = {}) {
 class Auth {
   constructor(dir) { this.file = path.join(dir, 'auth.json'); }
 
-  load() { try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch { return null; } }
-  save(a) { fs.writeFileSync(this.file, JSON.stringify(a, null, 2)); }
+  load() {
+    try {
+      const a = JSON.parse(fs.readFileSync(this.file, 'utf8'));
+      return this.decryptToken(a);
+    } catch { return null; }
+  }
+
+  save(a) {
+    fs.writeFileSync(this.file, JSON.stringify(this.encryptToken({ ...a }), null, 2));
+  }
+
   clear() { try { fs.unlinkSync(this.file); } catch {} }
+
+  /** EPIC-токен хранится ТОЛЬКО зашифрованным (safeStorage/DPAPI на Windows). */
+  encryptToken(a) {
+    if (!a || a.type !== 'epic' || !a.token) return a;
+    if (safeStorage && safeStorage.isEncryptionAvailable && safeStorage.isEncryptionAvailable()) {
+      try {
+        const { token, ...rest } = a;
+        return { ...rest, tokenEnc: safeStorage.encryptString(token).toString('base64') };
+      } catch (e) {
+        console.warn('[auth] safeStorage encrypt failed:', e.message);
+        return a;
+      }
+    }
+    console.warn('[auth] safeStorage недоступен — токен сохранён открытым текстом (fallback)');
+    return a;
+  }
+
+  decryptToken(a) {
+    if (!a || !a.tokenEnc) return a;
+    const { tokenEnc, ...rest } = a;
+    if (!(safeStorage && safeStorage.isEncryptionAvailable && safeStorage.isEncryptionAvailable())) {
+      return { ...rest, token: null };
+    }
+    try {
+      return { ...rest, token: safeStorage.decryptString(Buffer.from(tokenEnc, 'base64')) };
+    } catch (e) {
+      console.warn('[auth] safeStorage decrypt failed:', e.message);
+      return { ...rest, token: null };
+    }
+  }
 
   /** Offline profile. */
   offline(nick) {

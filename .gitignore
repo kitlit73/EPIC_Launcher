@@ -1,6 +1,10 @@
 node_modules/
 dist-app/
 .minecraft/
+server/
+.kilo/
 *.log
 .DS_Store
 Thumbs.db
+.env
+/.env

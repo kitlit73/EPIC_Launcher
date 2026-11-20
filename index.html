@@ -4,9 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EPIC Launcher — Minecraft Launcher</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛏️</text></svg>" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Unbounded:wght@500;700;900&family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" href="assets/icon.ico" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -18,9 +16,13 @@
     <div class="sun"></div>
     <div class="clouds clouds--far"></div>
     <div class="clouds clouds--near"></div>
+    <div class="mountains"></div>
     <div class="hills hills--back"></div>
     <div class="hills hills--front"></div>
     <div class="ground"></div>
+    <div class="meadow"></div>
+    <div class="ceiling"></div>
+    <div class="ceiling-glow"></div>
     <div class="particles" id="particles"></div>
     <div class="vignette"></div>
   </div>
@@ -29,7 +31,7 @@
     <!-- ===== Боковая панель ===== -->
     <aside class="sidebar">
       <div class="logo">
-        <div class="logo__block logo__block--grass"></div>
+        <img class="logo__icon" src="assets/icon.ico" alt="EPIC Launcher" draggable="false"/>
         <div class="logo__text">
           <span class="logo__title">EPIC</span>
           <span class="logo__sub">LAUNCHER</span>
@@ -41,7 +43,11 @@
           <svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3z"/></svg>
           <span>Главная</span>
         </button>
-        <button class="nav__item" data-page="mods">
+        <button class="nav__item" data-page="accounts">
+          <svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zm-8 9a8 8 0 0116 0v1h-16v-1z"/></svg>
+          <span>Аккаунты</span>
+        </button>
+        <button class="nav__item nav__item--mods" data-page="mods">
           <svg viewBox="0 0 24 24"><path d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v3h20V9a2 2 0 00-2-2zM9 5h6v2H9V5zM2 14v5a2 2 0 002 2h16a2 2 0 002-2v-5h-7v3h-6v-3H2z"/></svg>
           <span>Моды</span>
         </button>
@@ -57,7 +63,7 @@
           <div class="news-card__title" id="newsTitle">Minecraft 1.21 — Tricky Trials</div>
           <div class="news-card__dots" id="newsDots"></div>
         </div>
-        <div class="version-label">v2.4.1 • EPIC Launcher</div>
+        <div class="version-label">v1.0.0 • EPIC Launcher</div>
       </div>
     </aside>
 
@@ -66,7 +72,11 @@
       <header class="topbar">
         <div class="search">
           <svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.41-1.41-4.75-4.75A6 6 0 0010 4zm0 2a4 4 0 110 8 4 4 0 010-8z"/></svg>
-          <input type="text" placeholder="Поиск версий и модов…" id="searchInput"/>
+          <input type="text" placeholder="Поиск версий…" id="searchInput"/>
+        </div>
+        <div class="mode-switch" id="modeSwitch" title="Режим лаунчера">
+          <button class="mode-switch__btn is-active" data-mode="simple">Простой</button>
+          <button class="mode-switch__btn" data-mode="advanced">Продвинутый</button>
         </div>
         <div class="user-chip" id="userChip" title="Профиль">
           <div class="user-chip__info">
@@ -78,6 +88,7 @@
 
       <!-- === Страница: Главная === -->
       <section class="page page--home is-active" id="page-home">
+        <div id="homeSimple">
         <div class="hero">
           <h1 class="hero__title">ГОТОВЫ К&nbsp;ПРИКЛЮЧЕНИЯМ?</h1>
           <p class="hero__sub">Построй. Исследуй. Выживай. Твой мир ждёт.</p>
@@ -85,22 +96,6 @@
 
         <div class="cards">
           <div class="card card--play">
-            <div class="field">
-              <label class="field__label">Аккаунт</label>
-              <div class="account-row">
-                <div class="account-row__info">
-                  <input class="input input--name" id="nickInput" value="Steve" maxlength="16" spellcheck="false"/>
-                  <div class="account-type" id="accountType">▍Не авторизован</div>
-                </div>
-                <button class="btn btn--ghost" id="randomNick" title="Случайный ник">🎲</button>
-              </div>
-              <div class="account-actions">
-                <button class="btn btn--ghost btn--sm" id="msLoginBtn">🟦 Войти через Microsoft</button>
-                <button class="btn btn--ghost btn--sm" id="offLoginBtn">⚡ Оффлайн-режим</button>
-                <button class="btn btn--ghost btn--sm is-hidden" id="logoutBtn">Выйти</button>
-              </div>
-            </div>
-
             <div class="field">
               <label class="field__label">Версия игры <span class="ver-count" id="verCount"></span></label>
               <div class="ver-tabs" id="verTabs">
@@ -132,6 +127,15 @@
             </div>
 
             <div class="launch-zone">
+              <div class="launch-zone__row">
+                <div class="loader-select" id="loaderSelect" title="Загрузчик модов для запуска">
+                  <button class="loader-option is-active" data-loader="vanilla"><span class="loader-option__icon">⛏</span>Ваниль</button>
+                  <button class="loader-option" data-loader="fabric"><span class="loader-option__icon">🧵</span>Fabric</button>
+                  <button class="loader-option" data-loader="forge"><span class="loader-option__icon">⚒</span>Forge</button>
+                  <button class="loader-option" data-loader="neoforge"><span class="loader-option__icon">🧬</span>NeoForge</button>
+                  <button class="loader-option" data-loader="quilt"><span class="loader-option__icon">🪡</span>Quilt</button>
+                </div>
+              </div>
               <div class="progress" id="progress">
                 <div class="progress__bar" id="progressBar"></div>
                 <div class="progress__text" id="progressText"></div>
@@ -145,12 +149,222 @@
 
           <div class="card card--side">
             <div class="servers">
-              <div class="servers__title">ПОПУЛЯРНЫЕ СЕРВЕРЫ</div>
-              <label class="server"><input type="radio" name="server" value="" checked/><span class="server__dot server__dot--off"></span><span class="server__name">Одиночная игра</span><span class="server__ping">—</span></label>
-              <label class="server"><input type="radio" name="server" value="mc.hypixel.net"/><span class="server__dot"></span><span class="server__name">Hypixel</span><span class="server__ping" data-ping="mc.hypixel.net">…</span></label>
-              <label class="server"><input type="radio" name="server" value="play.minemen.net"/><span class="server__dot"></span><span class="server__name">MineMan</span><span class="server__ping" data-ping="play.minemen.net">…</span></label>
-              <label class="server"><input type="radio" name="server" value="eu.mineserv.net"/><span class="server__dot server__dot--mid"></span><span class="server__name">MiniServ</span><span class="server__ping" data-ping="eu.mineserv.net">…</span></label>
-              <label class="server"><input type="radio" name="server" value="projectgaming.ru"/><span class="server__dot"></span><span class="server__name">ProjectGaming</span><span class="server__ping" data-ping="projectgaming.ru">…</span></label>
+              <div class="servers__title">СЕРВЕРА МАЙНКРАФТА</div>
+              <button class="server server--epic" id="epicServerBtn">
+                <span class="server__dot"></span>
+                <span class="server__text">
+                  <span class="server__name">🔥 EPIC</span>
+                  <span class="server__addr">Epic.servmine.top</span>
+                </span>
+                <span class="server__status">
+                  <span class="server__ping" id="epicPing">…</span>
+                  <span class="server__go">▶</span>
+                </span>
+              </button>
+              <div class="servers__sub" id="serversSub">Мои сервера</div>
+              <div id="userServers"></div>
+              <div class="server-add">
+                <input class="input input--jvm" id="userServerIp" placeholder="IP сервера, напр. play.example.com" spellcheck="false"/>
+                <button class="btn btn--ghost btn--sm" id="userServerAddBtn">➕ Добавить</button>
+              </div>
+              <label class="server server--row" data-host=""><input type="radio" name="server" value="" checked/><span class="server__dot server__dot--off"></span><span class="server__name">Одиночная игра</span><span class="server__ping">—</span></label>
+              <div class="servers__sub">Сервера в меню мультиплеера</div>
+              <button class="btn btn--ghost btn--sm" id="syncServersBtn" title="Добавить мои сервера в меню мультиплеера игры">➕ Вписать сервера в игру</button>
+              <div class="servers__sub" id="serversMpStatus">—</div>
+            </div>
+          </div>
+        </div>
+        </div><!-- /#homeSimple -->
+
+        <!-- === Продвинутый режим: сборки в стиле Prism Launcher / MultiMC === -->
+        <div class="instances-pane is-hidden" id="homeInstances">
+          <aside class="instances-pane__list card">
+            <div class="instances-pane__list-head">
+              <b>СБОРКИ</b>
+              <span class="instances-pane__count" id="homeInstCount">0</span>
+            </div>
+            <div class="instances-pane__list-body" id="homeInstList"></div>
+            <button class="btn btn--ghost inst-new" id="homeNewInstanceBtn">➕ Новая сборка</button>
+            <button class="btn btn--ghost inst-new" id="homeCatalogBtn">🌐 Каталог сборок</button>
+          </aside>
+
+          <div class="instances-pane__detail card" id="homeInstDetail">
+            <div class="inst-detail-empty" id="homeInstEmpty">Выберите или создайте сборку слева.</div>
+            <div class="inst-detail is-hidden" id="homeInstDetailBody">
+              <div class="inst-detail__head">
+                <div class="inst-detail__icon" id="homeInstIcon">⛏</div>
+                <div class="inst-detail__title">
+                  <div class="inst-detail__name" id="homeInstName">—</div>
+                  <div class="inst-detail__sub" id="homeInstSub">—</div>
+                </div>
+              </div>
+              <div class="inst-detail__badges" id="homeInstBadges"></div>
+              <div class="inst-detail__stats">
+                <div class="inst-detail__stat"><span>Версия</span><b id="homeInstVer">—</b></div>
+                <div class="inst-detail__stat"><span>Загрузчик</span><b id="homeInstLoader">—</b></div>
+                <div class="inst-detail__stat"><span>Память</span><b id="homeInstRam">—</b></div>
+                <div class="inst-detail__stat"><span>Модов</span><b id="homeInstModsCount">—</b></div>
+              </div>
+              <div class="inst-detail__actions">
+                <button class="btn-play inst-play" id="homeInstPlay">
+                  <span class="btn-play__label">ИГРАТЬ</span>
+                  <span class="btn-play__hint" id="homeInstPlayHint">Запустить сборку</span>
+                </button>
+                <div class="inst-detail__actions-row">
+                  <button class="btn btn--ghost" id="homeInstMods">🧩 Моды</button>
+                  <button class="btn btn--ghost" id="homeInstSettings">⚙ Настройки</button>
+                  <button class="btn btn--ghost" id="homeInstOpenDir">📁 Папка</button>
+                  <button class="btn btn--ghost inst-del" id="homeInstDel">🗑 Удалить</button>
+                </div>
+              </div>
+              <div class="loaders__status" id="homeInstStatus">—</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+        <!-- Диалог создания/настройки сборки -->
+        <div class="instance-dialog is-hidden" id="instanceDialog">
+          <div class="instance-dialog__box card">
+            <div class="instance-dialog__head">
+              <b id="instanceDlgTitle">Новая сборка</b>
+              <button class="btn btn--ghost btn--sm" id="instanceDlgClose">✕</button>
+            </div>
+            <div class="field">
+              <label class="field__label">Название</label>
+              <input class="input input--name" id="instName" value="" placeholder="Например: SkyBlock, Модный выживание…" maxlength="40"/>
+            </div>
+            <div class="field">
+              <label class="field__label">Иконка</label>
+              <div class="inst-icons" id="instIcons">
+                <button class="inst-icon is-active" data-icon="⛏">⛏</button>
+                <button class="inst-icon" data-icon="⚔">⚔</button>
+                <button class="inst-icon" data-icon="🏰">🏰</button>
+                <button class="inst-icon" data-icon="🌿">🌿</button>
+                <button class="inst-icon" data-icon="🔥">🔥</button>
+                <button class="inst-icon" data-icon="🚀">🚀</button>
+                <button class="inst-icon" data-icon="🧊">🧊</button>
+                <button class="inst-icon" data-icon="💎">💎</button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field__label">Версия Minecraft</label>
+              <select class="input input--select" id="instVersionSelect"></select>
+            </div>
+            <div class="field">
+              <label class="field__label">Загрузчик</label>
+              <div class="inst-loaders" id="instLoaders">
+                <button class="inst-loader is-active" data-loader="vanilla">Ваниль</button>
+                <button class="inst-loader" data-loader="fabric">Fabric</button>
+                <button class="inst-loader" data-loader="forge">Forge</button>
+                <button class="inst-loader" data-loader="neoforge">NeoForge</button>
+                <button class="inst-loader" data-loader="quilt">Quilt</button>
+              </div>
+              <div class="inst-loaders__hint" id="instLoadersHint">Fabric/Forge будут автоматически установлены для выбранной версии.</div>
+            </div>
+            <div class="field">
+              <label class="field__label">Оперативная память: <b id="instRamLabel">4 ГБ</b></label>
+              <input type="range" min="1" max="16" value="4" class="slider" id="instRamSlider"/>
+              <div class="slider-marks"><span>1G</span><span>4G</span><span>8G</span><span>12G</span><span>16G</span></div>
+            </div>
+            <div class="instance-dialog__foot">
+              <button class="btn btn--primary" id="instanceDlgSave">Создать сборку</button>
+              <div class="loaders__status" id="instanceDlgStatus"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Каталог сборок: Modrinth / FTB / импорт .mrpack -->
+        <div class="instance-dialog is-hidden" id="catalogDialog">
+          <div class="instance-dialog__box catalog-box card">
+            <div class="instance-dialog__head">
+              <b>🌐 Каталог сборок</b>
+              <button class="btn btn--ghost btn--sm" id="catalogClose">✕</button>
+            </div>
+            <div class="catalog-tabs">
+              <button class="mods-tab is-active" data-source="modrinth">🧩 Modrinth</button>
+              <button class="mods-tab" data-source="ftb">🧱 FTB</button>
+            </div>
+            <div class="mods-search__row">
+              <input class="input input--jvm" id="catalogSearchInput" placeholder="Поиск сборок…" spellcheck="false"/>
+              <button class="btn btn--ghost btn--sm" id="catalogSearchBtn">🔍 Искать</button>
+              <button class="btn btn--ghost btn--sm" id="catalogImportBtn">📂 Из файла</button>
+            </div>
+            <div class="mods-search__hint" id="catalogHint">Найдите сборку и нажмите «Установить» — загрузчик, моды и конфиги поставятся автоматически.</div>
+            <div class="catalog-grid mods-grid" id="catalogGrid"></div>
+            <div class="catalog-foot">
+              <div class="catalog-bar loading-bar"><div class="loading-bar__fill" id="catalogBar"></div></div>
+              <div class="loaders__status" id="catalogStatus">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Меню сборки: настройки + моды -->
+        <div class="instance-menu is-hidden" id="instanceMenu">
+          <div class="instance-menu__box card">
+            <div class="instance-menu__head">
+              <div class="instance-menu__title">
+                <span class="instance-card__icon" id="instMenuIcon">⛏</span>
+                <div>
+                  <div class="instance-card__title" id="instMenuName">Сборка</div>
+                  <div class="instance-card__ver" id="instMenuVer">—</div>
+                </div>
+              </div>
+              <button class="btn btn--ghost btn--sm" id="instMenuClose">✕</button>
+            </div>
+
+            <div class="instance-menu__tabs">
+              <button class="inst-menu-tab is-active" data-itab="settings">Настройки</button>
+            </div>
+
+            <div class="instance-menu__body">
+              <!-- Настройки -->
+              <div class="inst-tab inst-tab--settings is-active" id="instTabSettings">
+                <div class="setting"><div><b>Версия Minecraft</b><p>Базовая версия игры</p></div><div class="inst-menu__value" id="instMenuMcVersion">—</div></div>
+                <div class="setting"><div><b>Загрузчик</b><p>Ваниль / Fabric / Forge</p></div><div class="inst-menu__value" id="instMenuLoader">—</div></div>
+                <div class="setting"><div><b>Оперативная память: <span id="instMenuRamLabel">4 ГБ</span></b><p>Выделяемая память для сборки</p></div></div>
+                <div class="inst-ram-bar">
+                  <input type="range" min="1" max="16" value="4" class="slider" id="instMenuRam"/>
+                  <div class="slider-marks"><span>1G</span><span>4G</span><span>8G</span><span>12G</span><span>16G</span></div>
+                </div>
+                <div class="setting"><div><b>Аргументы JVM</b><p>Дополнительные параметры запуска</p></div><input class="input input--jvm" id="instMenuJvm" value="-XX:+UseG1GC -Dfile.encoding=UTF-8"/></div>
+                <div class="setting"><div><b>Сервер для быстрого входа</b><p>IP сервера (пусто — одиночная игра)</p></div><input class="input input--jvm" id="instMenuServer" spellcheck="false"/></div>
+                <div class="setting"><div><b>Полноэкранный режим</b><p>Запускать на весь экран</p></div><label class="switch"><input type="checkbox" id="instMenuFullscreen"/><span class="switch__track"></span></label></div>
+                <div class="inst-menu__actions">
+                  <button class="btn btn--ghost" id="instMenuOpenDir">📁 Открыть папку</button>
+                  <button class="btn btn--primary" id="instMenuSaveSettings">💾 Сохранить</button>
+                  <button class="btn btn--ghost" id="instMenuPlay">▶ Играть</button>
+                </div>
+                <div class="loaders__status" id="instMenuStatus">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <!-- === Страница: Аккаунты === -->
+      <section class="page" id="page-accounts">
+        <h2 class="page__title">Аккаунты</h2>
+        <div class="card settings settings--wide">
+          <div class="field">
+            <label class="field__label">Ваш аккаунт</label>
+            <div class="account-row">
+              <div class="account-row__info">
+                <input class="input input--name" id="nickInput" value="Steve" maxlength="16" spellcheck="false"/>
+                <div class="account-type" id="accountType">▍Не авторизован</div>
+              </div>
+              <button class="btn btn--ghost" id="randomNick" title="Случайный ник">🎲</button>
+            </div>
+            <div class="account-actions">
+              <button class="btn btn--ghost btn--sm" id="msLoginBtn">🔥 Войти через EPIC account</button>
+              <button class="btn btn--ghost btn--sm" id="offLoginBtn">⚡ Оффлайн-режим</button>
+              <button class="btn btn--ghost btn--sm is-hidden" id="logoutBtn">Выйти</button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="field__label">Сервер EPIC account</label>
+            <div class="account-row">
+              <div class="account-type" id="epicTestStatus">—</div>
+              <button class="btn btn--ghost btn--sm" id="epicTestBtn">🔌 Проверка связи</button>
             </div>
           </div>
         </div>
@@ -158,7 +372,30 @@
 
       <!-- === Страница: Моды === -->
       <section class="page" id="page-mods">
-        <h2 class="page__title">Моды и сборки</h2>
+        <div class="mods-context is-hidden" id="modsContext">
+          <button class="btn btn--ghost btn--sm" id="modsBackBtn">← Назад к сборкам</button>
+          <span class="mods-context__label" id="modsContextLabel"></span>
+        </div>
+        <h2 class="page__title" id="modsPageTitle">Моды</h2>
+        <div class="mods-search card">
+          <div class="mods-search__row">
+            <div class="mods-search__tabs" id="modsTabs">
+              <button class="mods-tab is-active" data-source="modrinth">🔥 Популярные</button>
+              <button class="mods-tab" data-source="installed">📦 Установленные</button>
+            </div>
+            <select class="input input--select input--loader" id="modsLoaderSelect">
+              <option value="any">Любой загрузчик</option>
+              <option value="fabric">Fabric</option>
+              <option value="forge">Forge</option>
+              <option value="neoforge">NeoForge</option>
+              <option value="quilt">Quilt</option>
+            </select>
+            <select class="input input--select input--loader" id="modsVersionSelect" title="Версия Minecraft"></select>
+            <input class="input input--jvm" id="modsSearchInput" placeholder="Поиск модов…" spellcheck="false"/>
+            <button class="btn btn--ghost btn--sm" id="modsSearchBtn">🔍 Искать</button>
+          </div>
+          <div class="mods-search__hint" id="modsSearchHint">Нажмите «Искать» или выберите из популярных ниже — мод скачается в папку mods.</div>
+        </div>
         <div class="mods-grid" id="modsGrid"></div>
       </section>
 
@@ -166,15 +403,50 @@
       <section class="page" id="page-settings">
         <h2 class="page__title">Настройки</h2>
         <div class="settings card settings--wide">
+          <div class="setting"><div><b>Тема</b><p>Цветовое оформление интерфейса</p></div>
+            <div class="theme-picker" id="themePicker">
+              <button class="theme-opt is-active" data-theme="lava" title="Лава"><span class="theme-swatch sw-lava"></span>Лава</button>
+              <button class="theme-opt" data-theme="emerald" title="Изумруд"><span class="theme-swatch sw-emerald"></span>Изумруд</button>
+              <button class="theme-opt" data-theme="ocean" title="Океан"><span class="theme-swatch sw-ocean"></span>Океан</button>
+              <button class="theme-opt" data-theme="void" title="Пустота"><span class="theme-swatch sw-void"></span>Пустота</button>
+            </div>
+          </div>
+          <div class="setting"><div><b>Фон</b><p>Задний фон сцены</p></div>
+            <div class="theme-picker" id="bgPicker">
+              <button class="theme-opt is-active" data-bg="lava" title="Незер"><span class="theme-swatch sw-lava"></span>Незер</button>
+              <button class="theme-opt" data-bg="night" title="Пещера"><span class="theme-swatch sw-night"></span>Пещера</button>
+              <button class="theme-opt" data-bg="sunset" title="Закат на горе"><span class="theme-swatch sw-sunset"></span>Закат на горе</button>
+              <button class="theme-opt" data-bg="aurora" title="Солнечная лужайка"><span class="theme-swatch sw-aurora"></span>Солнечная лужайка</button>
+            </div>
+          </div>
+          <div class="setting"><div><b>Режим лаунчера</b><p>Простой — одна версия. Продвинутый — сборки (Prism Launcher style)</p></div>
+            <div class="mode-switch" id="settingsModeSwitch">
+              <button class="mode-switch__btn is-active" data-mode="simple">Простой</button>
+              <button class="mode-switch__btn" data-mode="advanced">Продвинутый</button>
+            </div>
+          </div>
           <div class="setting"><div><b>Полноэкранный режим</b><p>Запускать игру на весь экран</p></div><label class="switch"><input type="checkbox" id="setFullscreen"/><span class="switch__track"></span></label></div>
-          <div class="setting"><div><b>Обновлять ядро автоматически</b><p>Проверять новые версии лаунчера при запуске</p></div><label class="switch"><input type="checkbox" checked/><span class="switch__track"></span></label></div>
+          <div class="setting"><div><b>Обновлять ядро автоматически</b><p>Проверять новые версии лаунчера при запуске</p></div><label class="switch"><input type="checkbox" checked id="setAutoUpdate"/><span class="switch__track"></span></label></div>
           <div class="setting"><div><b>Звук в интерфейсе</b><p>Клик-звуки в стиле Minecraft</p></div><label class="switch"><input type="checkbox" id="setSound" checked/><span class="switch__track"></span></label></div>
           <div class="setting"><div><b>Аргументы JVM</b><p>Дополнительные параметры запуска</p></div><input class="input input--jvm" id="setJvmArgs" value="-XX:+UseG1GC -Dfile.encoding=UTF-8"/></div>
-          <div class="setting"><div><b>Сервер для быстрого входа</b><p>IP сервера (пусто — одиночная игра)</p></div><input class="input input--jvm" id="setServerIp" placeholder="mc.hypixel.net" spellcheck="false"/></div>
+          <div class="setting"><div><b>Сервер для быстрого входа</b><p>IP сервера (пусто — одиночная игра)</p></div><input class="input input--jvm" id="setServerIp" value="Epic.servmine.top" spellcheck="false"/></div>
           <div class="setting"><div><b>Каталог игры</b><p>Папка .minecraft, куда скачивается игра</p></div><div class="dir-row"><input class="input input--jvm" id="setGameDir" readonly/><button class="btn btn--ghost btn--sm" id="openDirBtn">Открыть</button></div></div>
           <div class="setting"><div><b>Статус запуска</b><p>Java, версия, код выхода процесса игры</p></div><div class="launch-status mono" id="setLaunchStatus">—</div></div>
         </div>
-        <details class="card log-panel" id="logPanel">
+        <!-- === Раздел: Обновления (GitHub Releases) === -->
+      <div class="card settings settings--wide update-card" id="updateCard">
+        <div class="setting"><div><b>Версия лаунчера</b><p>Текущая версия</p></div><div class="launch-status mono" id="updateCurrent">—</div></div>
+        <div class="setting"><div><b>Обновления</b><p>Проверка из GitHub Releases: github.com/kitlit73/EPIC_Launcher</p></div>
+          <div class="account-actions">
+            <button class="btn btn--ghost btn--sm" id="updateCheckBtn">🔄 Проверить обновления</button>
+            <button class="btn btn--primary btn--sm is-hidden" id="updateInstallBtn">⬇ Обновить до <b id="updateVersionLabel"></b></button>
+          </div>
+        </div>
+        <div class="progress" id="updateProgress"><div class="progress__bar" id="updateBar"></div><div class="progress__text" id="updateText"></div></div>
+        <div class="loaders__status" id="updateStatus">—</div>
+      </div>
+
+      <details class="card log-panel" id="logPanel">
           <summary class="log-panel__head">📜 Лог игры (последний запуск)</summary>
           <pre class="log-panel__body mono" id="gameLog"></pre>
         </details>
@@ -185,10 +457,34 @@
         <div class="launch-overlay__inner">
           <div class="mojang-logo">⛏ EPIC LAUNCHER</div>
           <div class="loading-bar"><div class="loading-bar__fill" id="overlayBar"></div></div>
+          <div class="overlay-status" id="overlayStatus">Подготовка…</div>
           <div class="loading-tip" id="loadingTip">Совет: факелы отпугивают мобов — освещайте пещеры!</div>
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- === Модалка входа в EPIC account === -->
+  <div class="instance-dialog is-hidden" id="epicAuthDialog">
+    <div class="instance-dialog__box card">
+      <div class="instance-dialog__head">
+        <b>🔥 EPIC account</b>
+        <button class="btn btn--ghost btn--sm" id="epicAuthClose">✕</button>
+      </div>
+      <div class="field">
+        <label class="field__label">Ник</label>
+        <input class="input input--name" id="epicAuthNick" value="" maxlength="16" spellcheck="false" placeholder="Steve"/>
+      </div>
+      <div class="field">
+        <label class="field__label">Пароль</label>
+        <input class="input input--name" id="epicAuthPass" type="password" placeholder="••••••••" autocomplete="off"/>
+      </div>
+      <div class="loaders__status" id="epicAuthStatus">Вход через EPIC account (база данных PostgreSQL)</div>
+      <div class="instance-dialog__foot">
+        <button class="btn btn--primary" id="epicAuthLoginBtn">Войти</button>
+        <button class="btn btn--ghost" id="epicAuthRegisterBtn">Создать аккаунт</button>
+      </div>
+    </div>
   </div>
 
   <!-- Тосты -->

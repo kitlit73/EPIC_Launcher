@@ -87,10 +87,9 @@ function collectJavaCandidates() {
   const candidates = [];
   const push = p => { if (p) candidates.push(p); };
   if (process.env.JAVA_HOME) push(path.join(process.env.JAVA_HOME, 'bin', exe()));
-  try {
-    const out = execFileSync(process.platform === 'win32' ? 'where' : 'which', ['-a', 'java'], { encoding: 'utf8' });
-    for (const line of out.split('\n')) push(line.trim());
-  } catch { push(which('java')); }
+  // Не используем блокирующий execFileSync('where'/'reg') на каждом старте —
+  // он тормозит main-процесс и задерживает остальные IPC. Реестр и where
+  // покрываются ниже обходом стандартных каталогов.
   const dirs = [
     '/usr/lib/jvm', path.join(os.homedir() || '', '.sdkman/candidates/java'),
     '/Library/Java/JavaVirtualMachines',
@@ -107,17 +106,6 @@ function collectJavaCandidates() {
       }
     } catch {}
   }
-  // Windows registry (JavaSoft\JDK and older JavaSoft\Java Runtime Environment)
-  if (process.platform === 'win32') {
-    for (const key of ['HKLM\\SOFTWARE\\JavaSoft\\JDK', 'HKLM\\SOFTWARE\\WOW6432Node\\JavaSoft\\JDK']) {
-      try {
-        const out = execFileSync('reg', ['query', key], { encoding: 'utf16le' });
-        for (const m of out.matchAll(/InstallPath\s+REG_SZ\s+(.+?)\s*$/gm)) {
-          push(path.join(m[1].trim(), 'bin', exe()));
-        }
-      } catch {}
-    }
-  }
   const seen = new Set();
   const uniq = [];
   for (const c of candidates) {
@@ -133,27 +121,34 @@ function collectJavaCandidates() {
 /**
  * List installed JREs/JDKs with version info — for the UI dropdown.
  * runtimeDir: where launcher-downloaded Mojang runtimes live (also listed).
+ * Fully async: one `spawn` per candidate, never blocks the main process.
  */
-function listInstalledJava(runtimeDir) {
+async function listInstalledJava(runtimeDir) {
+  const { execFile } = require('child_process');
   const items = [];
-  const add = (p, source) => {
-    const v = javaMajorVersion(p);
-    if (v == null) return;
-    let vendor = 'Java';
+  const probe = (p, source) => new Promise(resolve => {
     try {
-      const out = require('child_process').spawnSync(p, ['-version'], { encoding: 'utf8' }).stderr || '';
-      const vm = /"(.*?)"/.exec(out) || /(OpenJDK[^"\r\n]*)/.exec(out);
-      if (vm) vendor = vm[1];
-    } catch {}
-    items.push({ path: p, major: v, vendor, source });
-  };
-  for (const p of collectJavaCandidates()) add(p, 'system');
+      execFile(p, ['-version'], { timeout: 4000 }, (err, _stdout, stderr) => {
+        const out = stderr || '';
+        const m = /version "?(\d+)(?:\.(\d+))?/.exec(out);
+        let major = m ? parseInt(m[1], 10) : null;
+        if (major === 1 && m[2]) major = parseInt(m[2], 10);
+        if (major == null) return resolve();
+        const vm = /"(.*?)"/.exec(out) || /(OpenJDK[^"\r\n]*)/.exec(out);
+        items.push({ path: p, major, vendor: vm ? vm[1] : 'Java', source });
+        resolve();
+      });
+    } catch { resolve(); }
+  });
+  const promises = [];
   try {
     for (const d of fs.readdirSync(runtimeDir)) {
       const bin = path.join(runtimeDir, d, 'bin', exe());
-      if (fs.existsSync(bin)) add(bin, 'mojang-runtime');
+      if (fs.existsSync(bin)) promises.push(probe(bin, 'mojang-runtime'));
     }
   } catch {}
+  for (const p of collectJavaCandidates()) promises.push(probe(p, 'system'));
+  await Promise.all(promises);
   items.sort((a, b) => a.major - b.major || String(a.path).localeCompare(String(b.path)));
   return items;
 }
@@ -182,7 +177,7 @@ const majorCache = new Map();
 function javaMajorVersion(javaPath) {
   if (majorCache.has(javaPath)) return majorCache.get(javaPath);
   try {
-    const out = require('child_process').spawnSync(javaPath, ['-version'], { encoding: 'utf8' }).stderr || '';
+    const out = require('child_process').spawnSync(javaPath, ['-version'], { encoding: 'utf8', timeout: 4000 }).stderr || '';
     const m = /version "?(\d+)(?:\.(\d+))?/.exec(out);
     let v = m ? parseInt(m[1], 10) : null;
     if (v === 1 && m[2]) v = parseInt(m[2], 10); // 1.8 -> 8
