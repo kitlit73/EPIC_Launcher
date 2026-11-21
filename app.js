@@ -527,10 +527,12 @@ async function refreshInstanceMenu() {
     menuInstance = inst;
   } catch {}
   $("#instMenuIcon").textContent = inst.icon || "⛏";
-  $("#instMenuName").textContent = inst.name;
   $("#instMenuVer").textContent = inst.versionId || inst.mcVersion || "—";
   $("#instMenuMcVersion").textContent = inst.mcVersion || "—";
-  $("#instMenuLoader").textContent = loaderName(inst.loader);
+  $("#instMenuName").value = inst.name || "";
+  const ls = $("#instMenuLoaderSelect");
+  if (ls) ls.value = inst.loader || "vanilla";
+  $("#instMenuLoaderVer").textContent = inst.loader !== "vanilla" ? (inst.versionId || inst.loaderVersion || loaderName(inst.loader)) : loaderName("vanilla");
   $("#instMenuRam").value = inst.ramGB || 4;
   updateInstMenuRam();
   $("#instMenuJvm").value = inst.extraJvm || "";
@@ -569,17 +571,56 @@ $$(".inst-menu-tab").forEach(t => t.addEventListener("click", () => { clickSound
 $("#instMenuRam")?.addEventListener("input", updateInstMenuRam);
 $("#instMenuSaveSettings")?.addEventListener("click", async () => {
   if (!menuInstance || !window.launcher) return;
-  const res = await launcher.instanceUpdate({
+  const st = $("#instMenuStatus");
+  const saveBtn = $("#instMenuSaveSettings");
+  const patch = {
     id: menuInstance.id,
     ramGB: +$("#instMenuRam").value,
     extraJvm: $("#instMenuJvm").value,
     javaPath: $("#instMenuJava")?.value && $("#instMenuJava").value !== "auto" ? $("#instMenuJava").value : null,
     serverIp: $("#instMenuServer").value.trim(),
     fullscreen: $("#instMenuFullscreen").checked,
-  });
-  const st = $("#instMenuStatus");
-  if (res.ok) { st.textContent = "✔ Настройки сохранены"; toast("✔ Настройки сборки сохранены"); refreshInstances(); }
-  else { st.textContent = "✖ " + (res.error || "Ошибка"); }
+  };
+
+  // Переименование
+  const newName = $("#instMenuName").value.trim();
+  if (newName && newName !== menuInstance.name) patch.name = newName;
+
+  // Смена загрузчика: при сохранении ставим его для версии сборки
+  const newLoader = $("#instMenuLoaderSelect")?.value || menuInstance.loader || "vanilla";
+  const loaderChanged = newLoader !== (menuInstance.loader || "vanilla");
+  if (loaderChanged && newLoader !== "vanilla") {
+    if (saveBtn) saveBtn.disabled = true;
+    if (st) st.textContent = `Устанавливаем ${loaderName(newLoader)} ${menuInstance.mcVersion || ""}…`;
+    const lr = await launcher.installLoader({ kind: newLoader, gameVersion: menuInstance.mcVersion, instanceId: menuInstance.id });
+    if (!lr.ok) {
+      if (saveBtn) saveBtn.disabled = false;
+      if (st) st.textContent = "✖ " + (lr.error || "Не удалось установить загрузчик");
+      toast("✖ " + (lr.error || "Не удалось установить загрузчик"), 5000);
+      return;
+    }
+    patch.loader = newLoader;
+    patch.versionId = lr.id || null;
+    patch.loaderVersion = lr.loader || null;
+  } else if (loaderChanged && newLoader === "vanilla") {
+    patch.loader = "vanilla";
+    patch.versionId = null;
+    patch.loaderVersion = null;
+  }
+
+  const res = await launcher.instanceUpdate(patch);
+  if (res.ok) {
+    menuInstance = res.instance || { ...menuInstance, ...patch, id: menuInstance.id };
+    refreshInstanceMenu();
+    if (st) st.textContent = loaderChanged
+      ? `✔ Загрузчик: ${loaderName(newLoader)}`
+      : "✔ Настройки сохранены";
+    toast(loaderChanged ? `✔ Загрузчик сменён на ${loaderName(newLoader)}` : "✔ Настройки сборки сохранены");
+    refreshInstances();
+  } else {
+    if (st) st.textContent = "✖ " + (res.error || "Ошибка");
+  }
+  if (saveBtn) saveBtn.disabled = false;
 });
 $("#instMenuPlay")?.addEventListener("click", () => { const inst = menuInstance; closeInstanceMenu(); if (inst) launchInstance(inst); });
 $("#instMenuOpenDir")?.addEventListener("click", () => { if (window.launcher) launcher.openGameDir(menuInstance.id); });

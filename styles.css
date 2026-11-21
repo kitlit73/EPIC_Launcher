@@ -1079,6 +1079,9 @@ body:not(.mode-simple) .nav__item--mods { display: none; }
 .inst-ram-bar { width: 100%; max-width: 320px; }
 .inst-ram-bar .slider { width: 100%; margin-top: 4px; }
 .inst-ram-bar .slider-marks { font-size: 10px; }
+/* Ползунок RAM в настройках сборки — на всю ширину, подпись сверху (как на главной) */
+.setting--stack { flex-direction: column; align-items: stretch; gap: 2px; }
+.setting--stack .inst-ram-bar { max-width: none; }
 .inst-menu__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 
 

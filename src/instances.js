@@ -111,7 +111,10 @@ function updateInstance(id, patch) {
   const meta = { ...(readMeta(id) || {}), ...patch, id: undefined };
   writeMeta(id, meta);
   fs.mkdirSync(dir, { recursive: true });
-  return { id, ...meta };
+  // meta содержит id: undefined — убираем ключ, чтобы он не перебил id в спреде
+  const saved = { ...meta };
+  delete saved.id;
+  return { id, ...saved };
 }
 
 function touch(id) {

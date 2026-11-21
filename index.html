@@ -63,7 +63,7 @@
           <div class="news-card__title" id="newsTitle">Minecraft 1.21 — Tricky Trials</div>
           <div class="news-card__dots" id="newsDots"></div>
         </div>
-        <div class="version-label">v1.0.7 • EPIC Launcher</div>
+        <div class="version-label">v1.0.8 • EPIC Launcher</div>
       </div>
     </aside>
 
@@ -336,12 +336,25 @@
             <div class="instance-menu__body">
               <!-- Настройки -->
               <div class="inst-tab inst-tab--settings is-active" id="instTabSettings">
+                <div class="setting"><div><b>Название сборки</b><p>Отображается в списке сборок</p></div><input class="input input--jvm" id="instMenuName" spellcheck="false"/></div>
                 <div class="setting"><div><b>Версия Minecraft</b><p>Базовая версия игры</p></div><div class="inst-menu__value" id="instMenuMcVersion">—</div></div>
-                <div class="setting"><div><b>Загрузчик</b><p>Ваниль / Fabric / Forge</p></div><div class="inst-menu__value" id="instMenuLoader">—</div></div>
-                <div class="setting"><div><b>Оперативная память: <span id="instMenuRamLabel">4 ГБ</span></b><p>Выделяемая память для сборки</p></div></div>
-                <div class="inst-ram-bar">
-                  <input type="range" min="1" max="16" value="4" class="slider" id="instMenuRam"/>
-                  <div class="slider-marks"><span>1G</span><span>4G</span><span>8G</span><span>12G</span><span>16G</span></div>
+                <div class="setting"><div><b>Загрузчик модов</b><p>Смена переустановит загрузчик для этой версии</p></div>
+                  <div class="java-row">
+                    <select class="input input--select" id="instMenuLoaderSelect">
+                      <option value="vanilla">🪄 Ванильный</option>
+                      <option value="fabric">🧵 Fabric</option>
+                      <option value="forge">🔥 Forge</option>
+                      <option value="neoforge">⚙ NeoForge</option>
+                      <option value="quilt">🪡 Quilt</option>
+                    </select>
+                    <div class="inst-menu__value" id="instMenuLoaderVer" title="Установленная версия загрузчика">—</div>
+                  </div>
+                </div>
+                <div class="setting setting--stack"><div><b>Оперативная память: <span id="instMenuRamLabel">4 ГБ</span></b><p>Выделяемая память для сборки</p></div>
+                  <div class="inst-ram-bar">
+                    <input type="range" min="1" max="16" value="4" class="slider" id="instMenuRam"/>
+                    <div class="slider-marks"><span>1G</span><span>4G</span><span>8G</span><span>12G</span><span>16G</span></div>
+                  </div>
                 </div>
                 <div class="setting"><div><b>Аргументы JVM</b><p>Дополнительные параметры запуска</p></div><input class="input input--jvm" id="instMenuJvm" value="-XX:+UseG1GC -Dfile.encoding=UTF-8"/></div>
                 <div class="setting"><div><b>Java для этой сборки</b><p>Свой путь к Java (иначе — общая из настроек)</p></div>
