@@ -1407,11 +1407,20 @@ const NEWS = [
   "Java подбирается автоматически под каждую версию игры",
   "Совет: выделяйте текст в поиске — фильтрует моды",
 ];
+// NEWS_SERVER заполняется loadNews (ниже по коду) после загрузки новостей с
+// сервера; var, чтобы объявление было видно в loadNews. Пока сервер не
+// ответил — карточка показывает статичный список NEWS.
+var NEWS_SERVER = null;
+function newsCardList() { return (NEWS_SERVER && NEWS_SERVER.length) ? NEWS_SERVER : NEWS; }
+function newsLine(n) {
+  return typeof n === "string" ? n : ([n.title, n.text].filter(Boolean).join(" — ") || "Новость");
+}
 let newsIdx = 0;
 function rotateNews() {
-  $("#newsTitle").textContent = NEWS[newsIdx % NEWS.length];
+  const list = newsCardList();
+  $("#newsTitle").textContent = newsLine(list[newsIdx % list.length]);
   const dots = $("#newsDots");
-  dots.innerHTML = NEWS.map((_, i) => `<i class="${i === newsIdx % NEWS.length ? "on" : ""}"></i>`).join("");
+  dots.innerHTML = list.map((_, i) => `<i class="${i === newsIdx % list.length ? "on" : ""}"></i>`).join("");
   newsIdx++;
 }
 $("#newsCard").addEventListener("click", rotateNews);
@@ -1890,5 +1899,49 @@ window.addEventListener("beforeunload", () => {
     java: $("#javaSelect")?.value || "auto",
   }));
 });
+
+/* ---------- Новости сервера (плашка внизу окна) ---------- */
+let NEWS_ITEMS = [];
+let tickerIdx = 0, newsTimer = null;
+
+function showNextNews() {
+  const el = $("#news-content");
+  if (!el || !NEWS_ITEMS.length) return;
+  const n = NEWS_ITEMS[tickerIdx % NEWS_ITEMS.length];
+  tickerIdx++;
+  el.classList.add("is-switching");
+  setTimeout(() => {
+    el.textContent = `[${n.title || "Новость"}] ${n.text || ""}`.trim();
+    el.classList.remove("is-switching");
+  }, 250);
+}
+
+async function loadNews() {
+  const el = $("#news-content");
+  if (!el) return;
+  let items = [];
+  try {
+    const bridge = window.launcher || window.api;
+    items = await bridge.getNews();
+  } catch {}
+  if (Array.isArray(items) && items.length) {
+    const wasEmpty = !NEWS_ITEMS.length;
+    NEWS_ITEMS = items;
+    // Карточка в сайдбаре тоже показывает новости сервера (fallback — статичный список NEWS)
+    NEWS_SERVER = items;
+    rotateNews();
+    // показываем сразу при первой загрузке/после пустого списка, далее — ротация
+    if (!newsTimer || wasEmpty) { tickerIdx = 0; showNextNews(); }
+    if (!newsTimer) newsTimer = setInterval(showNextNews, 7000);
+  } else {
+    NEWS_ITEMS = [];
+    if (newsTimer) { clearInterval(newsTimer); newsTimer = null; }
+    el.textContent = "Свежих новостей пока нет.";
+  }
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadNews);
+else loadNews();
+// подтягиваем свежие новости с сервера каждые 5 минут — плашки меняются без перезапуска
+setInterval(loadNews, 5 * 60 * 1000);
 
 console.log("%c⛏ EPIC LAUNCHER готов к приключениям!", "color:#ff7a29;font-size:16px;font-weight:bold");

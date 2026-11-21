@@ -350,7 +350,8 @@ body[data-bg="night"] .ground {
   grid-template-columns: 250px 1fr;
   height: 100vh;
   gap: 18px;
-  padding: 18px;
+  /* Отступ снизу под плашку новостей (40px + зазор), чтобы она не перекрывала кнопки */
+  padding: 18px 18px 56px;
 }
 
 /* ============ SIDEBAR ============ */
@@ -1085,3 +1086,34 @@ body:not(.mode-simple) .nav__item--mods { display: none; }
 .inst-menu__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 
 
+
+/* ---------- Плашка новостей сервера ---------- */
+.news-ticker {
+  position: absolute; bottom: 0; left: 0; width: 100%;
+  height: 40px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 16px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  z-index: 55;
+}
+.news-badge {
+  flex: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.5px;
+}
+.news-track { flex: 1; min-width: 0; overflow: hidden; }
+.news-text {
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.25s ease;
+}
+.news-text.is-switching { opacity: 0; }

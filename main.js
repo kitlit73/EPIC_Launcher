@@ -23,6 +23,10 @@ const { checkUpdate, downloadUpdate, runUpdate } = require('./src/updater');
 const { buildArgs, launch } = require('./src/launcher');
 const { installLoader } = require('./src/loaders');
 const instances = require('./src/instances');
+const { smartFetch } = require('./src/net');
+
+// Новости сервера: JSON-файл по прямой ссылке (Raw) на GitHub.
+const NEWS_URL = 'https://raw.githubusercontent.com/kitlit73/epic-launcher-news/main/news.json';
 
 let GAME_DIR = '';   // .minecraft root
 let RUNTIME_DIR = '';// extracted Mojang JREs
@@ -171,6 +175,24 @@ ipcMain.handle('account:get', async () => {
 });
 
 ipcMain.handle('account:logout', async () => { auth.holder.clear(); return { ok: true }; });
+
+// Новости сервера: GET по NEWS_URL через smartFetch (работает через системный
+// прокси). Возвращает массив [{ title, text }, ...]; любая ошибка (нет сети,
+// 404, прокси заблокировал) -> [], чтобы лаунчер не падал.
+ipcMain.handle('get-news', async () => {
+  try {
+    const res = await smartFetch(NEWS_URL, { headers: { 'Cache-Control': 'no-cache' } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : (data && Array.isArray(data.news)) ? data.news : [];
+    return list
+      .filter(n => n && (n.title || n.text || n.content))
+      .map(n => ({ title: String(n.title || ''), text: String(n.text || n.content || n.message || n.body || '') }));
+  } catch (e) {
+    console.error('[get-news]', e && e.message);
+    return [];
+  }
+});
 
 /* ---------------- Обновления (GitHub Releases) ---------------- */
 

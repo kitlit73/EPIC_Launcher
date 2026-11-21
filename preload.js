@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('launcher', {
   modpacksImport: () => ipcRenderer.invoke('modpacks:import'),
   onPackProgress: (cb) => ipcRenderer.on('modpacks:progress', (_e, p) => cb(p)),
   appVersion: () => ipcRenderer.invoke('app:version'),
+  getNews: () => ipcRenderer.invoke('get-news'),
   updateCheck: () => ipcRenderer.invoke('update:check'),
   updateInstall: (o) => ipcRenderer.invoke('update:install', o),
   onUpdateProgress: (cb) => ipcRenderer.on('update:progress', (_e, p) => cb(p)),
