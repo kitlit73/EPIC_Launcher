@@ -164,6 +164,7 @@ async function loadRealVersions() {
     const prev = localStorage.getItem("epic-version");
     fillVersions();
     if (prev && list.some(v => v.id === prev)) { $("#versionSelect").value = prev; updateVersionInfo(); renderVersionPanel(); }
+    fillModsVersionSelect(); // селект модов мог заполниться раньше из fallback (5 версий) — обновляем полным списком
     $("#chipStatus").textContent = `Реальные версии: ${list.length} ✔`;
   } catch (e) {
     console.warn("Версии из сети недоступны:", e.message);
@@ -1516,8 +1517,8 @@ function fillModsVersionSelect() {
   const sel = $("#modsVersionSelect");
   if (!sel) return;
   const cur = sel.value;
-  // Как на главной: все версии (релизы + снапшоты + старые), тот же список
-  const items = allVersionItems();
+  // Только релизы: снапшоты и beta/alpha в модах не показываем
+  const items = allVersionItems().filter(v => v.type === "release");
   sel.innerHTML = '<option value="">Любая версия</option>';
   for (const v of items) {
     const o = document.createElement("option");
