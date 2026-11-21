@@ -1275,15 +1275,18 @@ async function loadPopularMods() {
 function fillModsVersionSelect() {
   const sel = $("#modsVersionSelect");
   if (!sel) return;
-  const items = allVersionItems().filter(v => v.type === "release" && !v.loader);
+  const cur = sel.value;
+  // Как на главной: все версии (релизы + снапшоты + старые), тот же список
+  const items = allVersionItems();
   sel.innerHTML = '<option value="">Любая версия</option>';
-  for (const v of items.slice(0, 30)) {
+  for (const v of items) {
     const o = document.createElement("option");
-    o.value = v.id; o.textContent = v.id;
+    o.value = v.id; o.textContent = `${v.id} (${typeName(v.type)})`;
     sel.appendChild(o);
   }
-  const cur = $("#versionSelect").value;
-  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+  const prev = $("#versionSelect").value;
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  else if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur;
 }
 
 async function refreshInstalledMods() {

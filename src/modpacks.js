@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 const AdmZip = require('adm-zip');
 const { sha1File } = require('./downloader');
 const { installLoader } = require('./loaders');
@@ -353,6 +354,153 @@ async function installFtbPack({ packId, versionId, name, onStatus, onProgress } 
 
 /* ================= Импорт .zip ================= */
 
+// выше ~1.2 ГБ adm-zip опасен (читает всё в память, лимит 2 ГБ) — идём через bsdtar
+// (EPIC_LARGE_ZIP — порог в байтах для тестов)
+const LARGE_ZIP_BYTES = Number(process.env.EPIC_LARGE_ZIP) || 1.2 * 1024 * 1024 * 1024;
+
+function tarList(zipPath) {
+  const out = execFileSync('tar', ['-tf', zipPath], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return out.split(/\r?\n/).filter(Boolean).map(s => s.replace(/\\/g, '/'));
+}
+
+function tarReadEntry(zipPath, entry) {
+  return execFileSync('tar', ['-xOf', zipPath, entry], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+}
+
+function tarExtract(zipPath, destDir, { strip = 0, pattern = null } = {}) {
+  fs.mkdirSync(destDir, { recursive: true });
+  const args = ['-xf', zipPath, '-C', destDir];
+  if (strip) args.push('--strip-components', String(strip));
+  if (pattern) args.push(pattern);
+  execFileSync('tar', args, { stdio: 'ignore', maxBuffer: 16 * 1024 * 1024 });
+}
+
+const stripOf = prefix => prefix.split('/').filter(Boolean).length;
+
+/** Импорт крупных (.zip > 1.2 ГБ): каталог читаем bsdtar'ом, распаковка потоковая. */
+async function importPackZipBig(zipPath, { name, onStatus, onProgress } = {}) {
+  onStatus && onStatus('Читаем каталог архива (файл больше 2 ГБ)…');
+  let names;
+  try {
+    names = tarList(zipPath);
+  } catch (e) {
+    throw new Error('Для архивов больше 2 ГБ нужен tar (встроен в Windows 10+): ' + e.message);
+  }
+  const files = names.map(s => s.replace(/\/$/, '')).filter(Boolean);
+  if (!files.length) throw new Error('Архив пуст');
+
+  // 1) Экспорт EPIC Launcher
+  if (files.includes('instance/instance.json')) {
+    onStatus && onStatus('Сборка EPIC Launcher — импорт…');
+    let srcMeta = {};
+    try { srcMeta = JSON.parse(tarReadEntry(zipPath, 'instance/instance.json')); } catch {}
+    const inst = createUniqueInstance({
+      name: name || srcMeta.name || 'Импортированная сборка',
+      mcVersion: srcMeta.mcVersion || '1.21.4', loader: srcMeta.loader || 'vanilla',
+      icon: srcMeta.icon || '📁', ramGB: srcMeta.ramGB || 4,
+    });
+    const keep = instances.getInstance(inst.id);
+    instances.updateInstance(inst.id, {
+      versionId: srcMeta.versionId || null, loaderVersion: srcMeta.loaderVersion || null,
+      extraJvm: srcMeta.extraJvm || '', serverIp: srcMeta.serverIp || '',
+      fullscreen: !!srcMeta.fullscreen, javaPath: srcMeta.javaPath || null,
+    });
+    onStatus && onStatus('Распаковка архива (может занять несколько минут)…');
+    tarExtract(zipPath, instances.instanceDir(inst.id), { strip: 1, pattern: 'instance/*' });
+    // instance.json из архива перезаписал мету (старое имя/id) — восстанавливаем
+    instances.updateInstance(inst.id, {
+      name: keep.name, icon: keep.icon, ramGB: keep.ramGB, created: Date.now(), lastPlayed: 0,
+    });
+    const fresh = instances.getInstance(inst.id);
+    onStatus && onStatus(`Сборка «${fresh.name}» импортирована`);
+    return fresh;
+  }
+
+  // 2) CurseForge: manifest.json в корне или в единственном подкаталоге
+  const cfName = files.find(n => n === 'manifest.json' || /^[^/]+\/manifest\.json$/.test(n));
+  if (cfName) {
+    let manifest;
+    try { manifest = JSON.parse(tarReadEntry(zipPath, cfName)); } catch { manifest = null; }
+    if (manifest && String(manifest.manifestType || '').includes('minecraftModpack')) {
+      const mc = manifest.minecraft && manifest.minecraft.version;
+      if (!mc) throw new Error('В manifest.json нет версии Minecraft');
+      const modLoaders = (manifest.minecraft.modLoaders || []).map(x => String(x.id || '')).filter(Boolean);
+      const ld = modLoaders.find(s => /^forge-/i.test(s)) || modLoaders.find(s => /^neoforge-/i.test(s)) ||
+        modLoaders.find(s => /^fabric-/i.test(s)) || modLoaders.find(s => /^quilt-/i.test(s)) || '';
+      const loader = ld ? (/^forge/i.test(ld) ? 'forge' : /^neoforge/i.test(ld) ? 'neoforge' : /^fabric/i.test(ld) ? 'fabric' : 'quilt') : 'vanilla';
+      const loaderVersion = ld ? ld.replace(/^[\w]+-/i, '') : null;
+
+      const packName = name || manifest.name || 'CurseForge сборка';
+      onStatus && onStatus(`Создание сборки «${packName}»…`);
+      const inst = createUniqueInstance({ name: packName, mcVersion: mc, loader, icon: '🧱', ramGB: 4 });
+      const gameDir = instances.instanceGameDir(inst.id);
+
+      onStatus && onStatus('Распаковка overrides…');
+      const ovRel = String(manifest.overrides || 'overrides').replace(/\/$/, '');
+      const ovPrefix = (cfName === 'manifest.json' ? '' : cfName.split('/')[0] + '/') + ovRel + '/';
+      tarExtract(zipPath, gameDir, { strip: stripOf(ovPrefix), pattern: ovPrefix + '*' });
+
+      return finishCurseforgeInstall({ inst, gameDir, manifest, mc, loader, loaderVersion, onStatus, onProgress });
+    }
+  }
+
+  // 3/4) Общий zip: корень контента + метаданные (mmc-pack.json / version.json)
+  let meta = null;
+  const mmcName = files.find(n => n === 'mmc-pack.json' || /^[^/]+\/mmc-pack\.json$/.test(n));
+  if (mmcName) {
+    try {
+      const j = JSON.parse(tarReadEntry(zipPath, mmcName));
+      const comps = j.components || [];
+      const mcC = comps.find(c => c.uid === 'net.minecraft');
+      const forgeC = comps.find(c => c.uid === 'net.minecraftforge');
+      const fabricC = comps.find(c => c.uid === 'net.fabricmc.fabric-loader');
+      const quiltC = comps.find(c => c.uid === 'net.quiltmc.quilt-loader');
+      const neoC = comps.find(c => c.uid === 'net.neoforged');
+      if (mcC && mcC.version) {
+        meta = {
+          mcVersion: String(mcC.version),
+          loader: forgeC ? 'forge' : fabricC ? 'fabric' : neoC ? 'neoforge' : quiltC ? 'quilt' : 'vanilla',
+          loaderVersion: (forgeC || fabricC || neoC || quiltC || {}).version || null,
+        };
+      }
+    } catch {}
+  }
+  if (!meta) {
+    const vName = files.find(n => n.endsWith('/version.json') || n === 'version.json');
+    if (vName) {
+      try { meta = parseVersionId(JSON.parse(tarReadEntry(zipPath, vName)).id); } catch {}
+    }
+  }
+  if (!meta) {
+    throw new Error('Не удалось определить версию Minecraft из архива. ' +
+      'Поддерживаются: экспорт EPIC Launcher (.zip), .mrpack, CurseForge (.zip с manifest.json), MultiMC/Prism (.zip с mmc-pack.json).');
+  }
+
+  const tops = [...new Set(files.map(n => n.split('/')[0]))];
+  const rootPrefix = tops.length === 1 ? tops[0] + '/' : '';
+  const inner = files.map(n => (rootPrefix && n.startsWith(rootPrefix) ? n.slice(rootPrefix.length) : n));
+  let contentPrefix = rootPrefix;
+  if (inner.some(n => n.startsWith('.minecraft/'))) contentPrefix = rootPrefix + '.minecraft/';
+  else if (inner.length && inner.every(n => n.startsWith('overrides/'))) contentPrefix = rootPrefix + 'overrides/';
+
+  const packName = name || (tops.length === 1 ? tops[0] : 'Импортированная сборка');
+  onStatus && onStatus(`Создание сборки «${packName}»…`);
+  const inst = createUniqueInstance({ name: packName, mcVersion: meta.mcVersion, loader: meta.loader, icon: '📁', ramGB: 4 });
+  const gameDir = instances.instanceGameDir(inst.id);
+
+  onStatus && onStatus('Распаковка файлов сборки (может занять несколько минут)…');
+  tarExtract(zipPath, gameDir, { strip: stripOf(contentPrefix), pattern: contentPrefix ? contentPrefix + '*' : null });
+
+  if (meta.loader !== 'vanilla') {
+    onStatus && onStatus(`Установка ${meta.loader} ${meta.loaderVersion || ''} (${meta.mcVersion})…`);
+    const res = await installLoader(meta.loader, gameDir, meta.mcVersion, s => onStatus && onStatus(s), { version: meta.loaderVersion });
+    instances.updateInstance(inst.id, { versionId: res.id, loaderVersion: res.loader });
+  }
+  const fresh = instances.getInstance(inst.id);
+  onStatus && onStatus(`Сборка «${fresh.name}» установлена`);
+  return fresh;
+}
+
 /** Распаковать файлы из префикса архива в destDir (safeJoin, рекурсивно создаёт папки). */
 function extractZipPrefix(zip, prefix, destDir) {
   let count = 0;
@@ -396,6 +544,12 @@ function parseVersionId(id) {
 async function importPackZip(zipPath, { name, onStatus, onProgress } = {}) {
   if (!fs.existsSync(zipPath)) throw new Error('Файл не найден: ' + zipPath);
   onStatus && onStatus('Чтение архива…');
+  // adm-zip читает файл целиком в память и падает на архивах >2 ГБ
+  // («File size ... greater than 2 GiB») — крупные распаковываем потоково
+  // системным bsdtar (встроен в Windows 10+, понимает zip).
+  if (fs.statSync(zipPath).size > LARGE_ZIP_BYTES) {
+    return importPackZipBig(zipPath, { name, onStatus, onProgress });
+  }
   const zip = new AdmZip(zipPath);
   const entries = zip.getEntries().filter(e => !e.isDirectory);
 
@@ -407,13 +561,16 @@ async function importPackZip(zipPath, { name, onStatus, onProgress } = {}) {
     return inst;
   }
 
-  // 2) CurseForge
-  const cfEntry = zip.getEntry('manifest.json');
+  // 2) CurseForge: manifest.json в корне или в единственном подкаталоге
+  const cfEntry = zip.getEntry('manifest.json') ||
+    entries.find(e => /^[^/]+\/manifest\.json$/.test(e.entryName.replace(/\\/g, '/')));
   if (cfEntry) {
     let manifest;
-    try { manifest = JSON.parse(cfEntry.getData().toString('utf8')); } catch {}
+    try { manifest = JSON.parse(cfEntry.getData().toString('utf8')); } catch { manifest = null; }
     if (manifest && String(manifest.manifestType || '').includes('minecraftModpack')) {
-      return installCurseforgeZip(zip, manifest, { name, onStatus, onProgress });
+      const rootPrefix = cfEntry.entryName.replace(/\\/g, '/') === 'manifest.json'
+        ? '' : cfEntry.entryName.replace(/\\/g, '/').split('/')[0] + '/';
+      return installCurseforgeZip(zip, manifest, { name, onStatus, onProgress, rootPrefix });
     }
   }
 
@@ -483,7 +640,7 @@ async function importPackZip(zipPath, { name, onStatus, onProgress } = {}) {
 }
 
 /** Импорт CurseForge .zip: overrides + загрузчик + моды через CFWidget. */
-async function installCurseforgeZip(zip, manifest, { name, onStatus, onProgress } = {}) {
+async function installCurseforgeZip(zip, manifest, { name, onStatus, onProgress, rootPrefix = '' } = {}) {
   const mc = manifest.minecraft && manifest.minecraft.version;
   if (!mc) throw new Error('В manifest.json нет версии Minecraft');
   const modLoaders = (manifest.minecraft.modLoaders || []).map(x => String(x.id || '')).filter(Boolean);
@@ -498,11 +655,15 @@ async function installCurseforgeZip(zip, manifest, { name, onStatus, onProgress 
   const gameDir = instances.instanceGameDir(inst.id);
 
   onStatus && onStatus('Распаковка overrides…');
-  const ovPrefix = String(manifest.overrides || 'overrides').replace(/\/$/, '') + '/';
+  const ovPrefix = rootPrefix + String(manifest.overrides || 'overrides').replace(/\/$/, '') + '/';
   const extracted = extractZipPrefix(zip, ovPrefix, gameDir);
   onProgress && onProgress({ done: extracted, total: extracted, filename: '' });
 
-  // Моды CurseForge: projectID/fileID -> ссылки через публичное зеркало CFWidget.
+  return finishCurseforgeInstall({ inst, gameDir, manifest, mc, loader, loaderVersion, onStatus, onProgress });
+}
+
+/** Общая часть CF-установки: моды из CFWidget + загрузчик точной версии. */
+async function finishCurseforgeInstall({ inst, gameDir, manifest, mc, loader, loaderVersion, onStatus, onProgress }) {
   const cfFiles = (manifest.files || []).filter(f => f && f.projectID && f.fileID && f.required !== false);
   let okMods = 0, failMods = 0;
   if (cfFiles.length) {
