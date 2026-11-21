@@ -609,26 +609,30 @@ ipcMain.handle('modpacks:install', async (_e, opts) => {
   }
 });
 
-// Импорт локального .mrpack-файла (сборка Modrinth) через диалог выбора файла.
+// Импорт локального файла сборки (.mrpack Modrinth или .zip: EPIC-экспорт /
+// CurseForge / MultiMC-Prism) через диалог выбора файла.
 ipcMain.handle('modpacks:import', async () => {
   try {
     const r = await dialog.showOpenDialog(win, {
-      title: 'Выберите файл сборки (.mrpack)',
+      title: 'Выберите файл сборки (.mrpack или .zip)',
       filters: [
-        { name: 'Сборки Modrinth', extensions: ['mrpack'] },
+        { name: 'Сборки (mrpack, zip)', extensions: ['mrpack', 'zip'] },
         { name: 'Все файлы', extensions: ['*'] },
       ],
       properties: ['openFile'],
     });
     if (r.canceled || !r.filePaths.length) return { ok: false, canceled: true };
-    const { installModrinthMrpack } = require('./src/modpacks');
-    const inst = await installModrinthMrpack(r.filePaths[0], {
+    const file = r.filePaths[0];
+    const opts = {
       onStatus: s => send('modpacks:progress', { stage: s }),
       onProgress: p => send('modpacks:progress', {
-        stage: `Файлы сборки (${p.done}/${p.total}): ${p.filename || ''}`,
-        pct: p.total ? Math.round(p.done / p.total * 100) : 0,
+        stage: p.stage || `Файлы сборки (${p.done}/${p.total}): ${p.filename || ''}`,
+        pct: p.pct != null ? p.pct : (p.total ? Math.round(p.done / p.total * 100) : 0),
       }),
-    });
+    };
+    const inst = /\.zip$/i.test(file)
+      ? await require('./src/modpacks').importPackZip(file, opts)
+      : await require('./src/modpacks').installModrinthMrpack(file, opts);
     return { ok: true, instance: inst };
   } catch (e) {
     return { ok: false, error: e.message };

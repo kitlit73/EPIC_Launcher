@@ -867,7 +867,7 @@ $("#catalogImportBtn")?.addEventListener("click", async () => {
   packInstalling = true;
   clickSound(700);
   const st = $("#catalogStatus"), bar = $("#catalogBar");
-  if (st) st.textContent = "Выберите файл .mrpack…";
+  if (st) st.textContent = "Выберите файл .mrpack или .zip…";
   try {
     const res = await launcher.modpacksImport();
     if (res.canceled) { if (st) st.textContent = "—"; }

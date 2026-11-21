@@ -170,7 +170,19 @@ function importInstance(zipPath, name) {
   const srcMeta = JSON.parse(metaEntry.getData().toString('utf8'));
   const newName = String(name || (srcMeta.name || 'Импортированная')).trim();
   const newId = uniqueSlug(newName);
-  zip.extractAllTo(instanceDir(newId), true);
+  // extractAllTo сохранил бы префикс instance/ вложенной папкой — распаковываем
+  // вручную со срезанием префикса (и защитой от ../ в архиве).
+  const dir = path.resolve(instanceDir(newId));
+  fs.mkdirSync(dir, { recursive: true });
+  for (const e of entries) {
+    if (e.isDirectory || !e.entryName.startsWith('instance/')) continue;
+    const rel = e.entryName.slice('instance/'.length);
+    if (!rel) continue;
+    const dest = path.resolve(dir, rel);
+    if (dest !== dir && !dest.startsWith(dir + path.sep)) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, e.getData());
+  }
   const meta = { ...srcMeta, name: newName, created: Date.now(), lastPlayed: 0 };
   writeMeta(newId, meta);
   return { id: newId, ...meta };

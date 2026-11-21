@@ -351,6 +351,197 @@ async function installFtbPack({ packId, versionId, name, onStatus, onProgress } 
   return fresh;
 }
 
+/* ================= Импорт .zip ================= */
+
+/** Распаковать файлы из префикса архива в destDir (safeJoin, рекурсивно создаёт папки). */
+function extractZipPrefix(zip, prefix, destDir) {
+  let count = 0;
+  for (const e of zip.getEntries()) {
+    if (e.isDirectory || !e.entryName.startsWith(prefix)) continue;
+    const rel = e.entryName.slice(prefix.length);
+    if (!rel) continue;
+    const dest = safeJoin(destDir, rel);
+    if (!dest) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, e.getData());
+    count++;
+  }
+  return count;
+}
+
+/** Распарсить id из version.json: vanilla/fabric/forge/neoforge/quilt. */
+function parseVersionId(id) {
+  const s = String(id || '');
+  let m = /^fabric-loader-([\d.]+)-(\d+(?:\.\d+)*)$/i.exec(s);
+  if (m) return { loader: 'fabric', loaderVersion: m[1], mcVersion: m[2] };
+  m = /^quilt-loader-([\w.\-]+)-(\d+(?:\.\d+)*)$/i.exec(s);
+  if (m) return { loader: 'quilt', loaderVersion: m[1], mcVersion: m[2] };
+  m = /^(\d+(?:\.\d+)*)-forge-([\w.\-]+)$/i.exec(s);
+  if (m) return { loader: 'forge', loaderVersion: m[2], mcVersion: m[1] };
+  m = /^(\d+(?:\.\d+)*)-neoforge-([\w.\-]+)$/i.exec(s);
+  if (m) return { loader: 'neoforge', loaderVersion: m[2], mcVersion: m[1] };
+  m = /^(\d+(?:\.\d+)*)$/i.exec(s);
+  if (m) return { loader: 'vanilla', loaderVersion: null, mcVersion: m[1] };
+  return null;
+}
+
+/**
+ * Импорт сборки из .zip. Поддерживаются:
+ *  1) экспорт EPIC Launcher (instance/instance.json) — точная копия сборки;
+ *  2) CurseForge (manifest.json + overrides/) — оверрайды + загрузчик + моды
+ *     через публичное зеркало CFWidget (api.curse.tools, без ключа API);
+ *  3) общий zip с .minecraft/ внутри (MultiMC/Prism: mmc-pack.json) или с
+ *     version.json где-либо — определяется версия Minecraft и загрузчик.
+ */
+async function importPackZip(zipPath, { name, onStatus, onProgress } = {}) {
+  if (!fs.existsSync(zipPath)) throw new Error('Файл не найден: ' + zipPath);
+  onStatus && onStatus('Чтение архива…');
+  const zip = new AdmZip(zipPath);
+  const entries = zip.getEntries().filter(e => !e.isDirectory);
+
+  // 1) Экспорт EPIC Launcher
+  if (zip.getEntry('instance/instance.json')) {
+    onStatus && onStatus('Сборка EPIC Launcher — импорт…');
+    const inst = instances.importInstance(zipPath, name);
+    onStatus && onStatus(`Сборка «${inst.name}» импортирована`);
+    return inst;
+  }
+
+  // 2) CurseForge
+  const cfEntry = zip.getEntry('manifest.json');
+  if (cfEntry) {
+    let manifest;
+    try { manifest = JSON.parse(cfEntry.getData().toString('utf8')); } catch {}
+    if (manifest && String(manifest.manifestType || '').includes('minecraftModpack')) {
+      return installCurseforgeZip(zip, manifest, { name, onStatus, onProgress });
+    }
+  }
+
+  // 3) Общий zip: определяем корень контента
+  const names = entries.map(e => e.entryName.replace(/\\/g, '/'));
+  if (!names.length) throw new Error('Архив пуст');
+  const tops = [...new Set(names.map(n => n.split('/')[0]))];
+  let prefix = tops.length === 1 ? tops[0] + '/' : '';
+  let inner = names.map(n => (prefix && n.startsWith(prefix) ? n.slice(prefix.length) : n)).filter(Boolean);
+  let contentPrefix = prefix;
+  if (inner.some(n => n.startsWith('.minecraft/'))) {
+    contentPrefix = prefix + '.minecraft/';
+  } else if (inner.every(n => n.startsWith('overrides/')) && inner.length) {
+    contentPrefix = prefix + 'overrides/';
+  }
+
+  // Версия/загрузчик: mmc-pack.json (MultiMC/Prism) или version.json где угодно
+  let meta = null;
+  const mmcEntry = zip.getEntry(contentPrefix + 'mmc-pack.json') ||
+    entries.find(e => e.entryName.replace(/\\/g, '/').endsWith('/mmc-pack.json'));
+  if (mmcEntry) {
+    try {
+      const j = JSON.parse(mmcEntry.getData().toString('utf8'));
+      const comps = j.components || [];
+      const mcC = comps.find(c => c.uid === 'net.minecraft');
+      const forgeC = comps.find(c => c.uid === 'net.minecraftforge');
+      const fabricC = comps.find(c => c.uid === 'net.fabricmc.fabric-loader');
+      const quiltC = comps.find(c => c.uid === 'net.quiltmc.quilt-loader');
+      const neoC = comps.find(c => c.uid === 'net.neoforged');
+      if (mcC && mcC.version) {
+        meta = {
+          mcVersion: String(mcC.version),
+          loader: forgeC ? 'forge' : fabricC ? 'fabric' : neoC ? 'neoforge' : quiltC ? 'quilt' : 'vanilla',
+          loaderVersion: (forgeC || fabricC || neoC || quiltC || {}).version || null,
+        };
+      }
+    } catch {}
+  }
+  if (!meta) {
+    const vEntry = entries.find(e => e.entryName.replace(/\\/g, '/').endsWith('/version.json'));
+    if (vEntry) {
+      try { meta = parseVersionId(JSON.parse(vEntry.getData().toString('utf8')).id); } catch {}
+    }
+  }
+  if (!meta) {
+    throw new Error('Не удалось определить версию Minecraft из архива. ' +
+      'Поддерживаются: экспорт EPIC Launcher (.zip), .mrpack, CurseForge (.zip с manifest.json), MultiMC/Prism (.zip с mmc-pack.json).');
+  }
+
+  const packName = name || (tops.length === 1 ? tops[0] : 'Импортированная сборка');
+  onStatus && onStatus(`Создание сборки «${packName}»…`);
+  const inst = createUniqueInstance({ name: packName, mcVersion: meta.mcVersion, loader: meta.loader, icon: '📁', ramGB: 4 });
+  const gameDir = instances.instanceGameDir(inst.id);
+
+  onStatus && onStatus('Распаковка файлов сборки…');
+  const extracted = extractZipPrefix(zip, contentPrefix, gameDir);
+  onProgress && onProgress({ done: extracted, total: extracted, filename: '' });
+
+  if (meta.loader !== 'vanilla') {
+    onStatus && onStatus(`Установка ${meta.loader} ${meta.loaderVersion || ''} (${meta.mcVersion})…`);
+    const res = await installLoader(meta.loader, gameDir, meta.mcVersion, s => onStatus && onStatus(s), { version: meta.loaderVersion });
+    instances.updateInstance(inst.id, { versionId: res.id, loaderVersion: res.loader });
+  }
+  const fresh = instances.getInstance(inst.id);
+  onStatus && onStatus(`Сборка «${fresh.name}» установлена`);
+  return fresh;
+}
+
+/** Импорт CurseForge .zip: overrides + загрузчик + моды через CFWidget. */
+async function installCurseforgeZip(zip, manifest, { name, onStatus, onProgress } = {}) {
+  const mc = manifest.minecraft && manifest.minecraft.version;
+  if (!mc) throw new Error('В manifest.json нет версии Minecraft');
+  const modLoaders = (manifest.minecraft.modLoaders || []).map(x => String(x.id || '')).filter(Boolean);
+  const ld = modLoaders.find(s => /^forge-/i.test(s)) || modLoaders.find(s => /^neoforge-/i.test(s)) ||
+    modLoaders.find(s => /^fabric-/i.test(s)) || modLoaders.find(s => /^quilt-/i.test(s)) || '';
+  const loader = ld ? (/^forge/i.test(ld) ? 'forge' : /^neoforge/i.test(ld) ? 'neoforge' : /^fabric/i.test(ld) ? 'fabric' : 'quilt') : 'vanilla';
+  const loaderVersion = ld ? ld.replace(/^[\w]+-/i, '') : null;
+
+  const packName = name || manifest.name || 'CurseForge сборка';
+  onStatus && onStatus(`Создание сборки «${packName}»…`);
+  const inst = createUniqueInstance({ name: packName, mcVersion: mc, loader, icon: '🧱', ramGB: 4 });
+  const gameDir = instances.instanceGameDir(inst.id);
+
+  onStatus && onStatus('Распаковка overrides…');
+  const ovPrefix = String(manifest.overrides || 'overrides').replace(/\/$/, '') + '/';
+  const extracted = extractZipPrefix(zip, ovPrefix, gameDir);
+  onProgress && onProgress({ done: extracted, total: extracted, filename: '' });
+
+  // Моды CurseForge: projectID/fileID -> ссылки через публичное зеркало CFWidget.
+  const cfFiles = (manifest.files || []).filter(f => f && f.projectID && f.fileID && f.required !== false);
+  let okMods = 0, failMods = 0;
+  if (cfFiles.length) {
+    onStatus && onStatus(`Загрузка модов CurseForge (${cfFiles.length})…`);
+    const urls = new Map();
+    const ids = cfFiles.map(f => f.fileID);
+    for (let i = 0; i < ids.length; i += 50) {
+      try {
+        const j = await jsonFetch(`https://api.curse.tools/v1/cf-mods/${ids.slice(i, i + 50).join(',')}`);
+        for (const it of (j && j.data) || []) if (it && it.downloadUrl) urls.set(String(it.id), it.downloadUrl);
+      } catch {}
+    }
+    const modsDir = path.join(gameDir, 'mods');
+    fs.mkdirSync(modsDir, { recursive: true });
+    let done = 0;
+    for (const f of cfFiles) {
+      const url = urls.get(String(f.fileID));
+      if (url) {
+        try {
+          const fn = decodeURIComponent(path.basename(new URL(url).pathname));
+          const dest = safeJoin(modsDir, fn);
+          if (dest) { await downloadFile(url, dest, null); okMods++; } else failMods++;
+        } catch { failMods++; }
+      } else failMods++;
+      done++;
+      onProgress && onProgress({ done, total: cfFiles.length, filename: 'fileID ' + f.fileID });
+    }
+  }
+
+  if (loader !== 'vanilla') {
+    onStatus && onStatus(`Установка ${loader} ${loaderVersion || ''} (${mc})…`);
+    const res = await installLoader(loader, gameDir, mc, s => onStatus && onStatus(s), { version: loaderVersion });
+    instances.updateInstance(inst.id, { versionId: res.id, loaderVersion: res.loader });
+  }
+  const fresh = instances.getInstance(inst.id);
+  onStatus && onStatus(`Сборка «${fresh.name}» установлена (${okMods} модов${failMods ? ', ' + failMods + ' не скачались' : ''})`);
+  return fresh;
+}
+
 /* ================= Единый API ================= */
 
 async function searchModpacks(source, query, gameVersion) {
@@ -365,7 +556,7 @@ async function installModpack(opts) {
 }
 
 module.exports = {
-  searchModpacks, installModpack, installModrinthMrpack,
+  searchModpacks, installModpack, installModrinthMrpack, importPackZip,
   searchModrinthPacks, modrinthPackVersions,
   searchFtbPacks, ftbPackInfo, ftbVersionManifest,
 };
