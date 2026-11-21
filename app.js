@@ -1094,6 +1094,205 @@ $("#epicAuthRegisterBtn")?.addEventListener("click", () => epicSubmit("register"
 $("#epicAuthPass")?.addEventListener("keydown", e => { if (e.key === "Enter") epicSubmit("login"); });
 $("#epicAuthNick")?.addEventListener("keydown", e => { if (e.key === "Enter") $("#epicAuthPass").focus(); });
 
+/* ---------- Обратная связь: предложения (лайки + звёзды админов) ---------- */
+let inboxFilter = "all";
+
+function isAdminUser() { return !!(account && account.type === "epic" && account.isAdmin); }
+
+/* --- Модалка «Предложить идею» --- */
+function openSuggestDialog() {
+  clickSound(640);
+  if (!window.launcher) return toast("⚠ Доступно в десктопной версии");
+  if (!account || account.type !== "epic") return toast("⚠ Войдите через EPIC account");
+  const st = $("#suggestStatus");
+  if (st) st.textContent = "Идея попадёт в «Ящик предложений» — до 500 символов.";
+  $("#suggestMessage").value = "";
+  updateSuggestCounter();
+  $("#suggestDialog")?.classList.remove("is-hidden");
+  $("#suggestMessage")?.focus();
+}
+function closeSuggestDialog() { $("#suggestDialog")?.classList.add("is-hidden"); }
+function updateSuggestCounter() {
+  const c = $("#suggestCounter"), m = $("#suggestMessage");
+  if (c && m) c.textContent = `${m.value.length} / 500`;
+}
+
+/* --- Модалка «Ящик предложений» --- */
+function openInboxDialog() {
+  clickSound(560);
+  if (!window.launcher) return toast("⚠ Доступно в десктопной версии");
+  if (!account || account.type !== "epic") return toast("⚠ Войдите через EPIC account");
+  // вкладка «⭐ Избранное» видна только админам
+  $("#inboxStarredTab")?.classList.toggle("is-hidden", !isAdminUser());
+  if (!isAdminUser() && inboxFilter !== "all") {
+    inboxFilter = "all";
+    $$(".inbox-tab").forEach(t => t.classList.toggle("is-active", t.dataset.filter === "all"));
+  }
+  $("#inboxDialog")?.classList.remove("is-hidden");
+  loadSuggestions();
+}
+function closeInboxDialog() { $("#inboxDialog")?.classList.add("is-hidden"); }
+
+async function loadSuggestions() {
+  const list = $("#inboxList"), st = $("#inboxStatus");
+  if (st) st.textContent = "Загружаем предложения…";
+  if (list) list.innerHTML = "";
+  try {
+    const res = await launcher.suggestionsList({ filter: inboxFilter });
+    if (!res.ok) { if (st) st.textContent = "✖ " + (res.error || "Ошибка"); return; }
+    renderSuggestions(res.suggestions || []);
+    if (st) st.textContent = inboxFilter === "starred" ? "⭐ Избранные идеи" : `Предложений: ${(res.suggestions || []).length}`;
+  } catch (e) {
+    if (st) st.textContent = "✖ " + (e && e.message || "Ошибка загрузки");
+  }
+}
+
+function fmtSuggestDate(d) {
+  try {
+    return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  } catch { return ""; }
+}
+
+function renderSuggestions(items) {
+  const list = $("#inboxList");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!items.length) {
+    list.innerHTML = '<div class="inbox-empty">Пока нет предложений — нажмите «💡 Предложить идею» и станьте первым!</div>';
+    return;
+  }
+  const admin = isAdminUser();
+  for (const s of items) {
+    const el = document.createElement("div");
+    el.className = "inbox-item";
+    el.innerHTML = `
+      <div class="inbox-item__head">
+        <span class="inbox-item__author">${esc(s.username)}:</span>
+        ${s.is_starred ? '<span class="inbox-item__starred" title="Отмечено админом">⭐</span>' : ""}
+        <span class="inbox-item__date">${esc(fmtSuggestDate(s.created_at))}</span>
+      </div>
+      <div class="inbox-item__text">${esc(s.message)}</div>
+      <div class="inbox-item__actions">
+        <button class="inbox-like ${s.likedByMe ? "is-liked" : ""}" data-like="${s.id}" title="${s.likedByMe ? "Убрать лайк" : "Поддержать"}">❤ <span>${s.likes}</span></button>
+        ${admin ? `<button class="inbox-star ${s.is_starred ? "is-starred" : ""}" data-star="${s.id}" title="Отметить избранным">⭐</button>
+        <button class="inbox-del" data-del="${s.id}" title="Удалить предложение">🗑️</button>` : ""}
+      </div>`;
+    list.appendChild(el);
+  }
+}
+
+/* Лайк/звезда — обновляем кнопку на месте, без перезагрузки списка */
+$("#inboxList")?.addEventListener("click", async (e) => {
+  const likeBtn = e.target.closest("[data-like]");
+  if (likeBtn) {
+    likeBtn.disabled = true;
+    try {
+      const r = await launcher.suggestionLike({ id: likeBtn.dataset.like });
+      if (r.ok) {
+        likeBtn.classList.toggle("is-liked", r.likedByMe);
+        likeBtn.title = r.likedByMe ? "Убрать лайк" : "Поддержать";
+        likeBtn.querySelector("span").textContent = r.likes;
+      } else {
+        toast("✖ " + (r.error || "Ошибка"));
+      }
+    } catch {}
+    likeBtn.disabled = false;
+    return;
+  }
+  const starBtn = e.target.closest("[data-star]");
+  if (starBtn) {
+    starBtn.disabled = true;
+    try {
+      const r = await launcher.suggestionStar({ id: starBtn.dataset.star });
+      if (r.ok) {
+        starBtn.classList.toggle("is-starred", r.is_starred);
+        loadSuggestions(); // перерисуем бейдж ⭐ в шапке карточки
+      } else {
+        toast("✖ " + (r.error || "Ошибка"));
+      }
+    } catch {}
+    starBtn.disabled = false;
+    return;
+  }
+  // Удаление предложения (кнопка видна только админам, проверка прав — на сервере)
+  const delBtn = e.target.closest("[data-del]");
+  if (delBtn) {
+    if (!confirm("Вы уверены, что хотите удалить это предложение?")) return;
+    delBtn.disabled = true;
+    try {
+      const r = await launcher.deleteSuggestion(delBtn.dataset.del);
+      if (r.ok) {
+        const item = delBtn.closest(".inbox-item");
+        if (item) {
+          item.classList.add("is-deleted");
+          setTimeout(() => {
+            item.remove();
+            const left = document.querySelectorAll(".inbox-item").length;
+            const st = $("#inboxStatus");
+            if (st) st.textContent = inboxFilter === "starred" ? "⭐ Избранные идеи" : `Предложений: ${left}`;
+            if (!left) {
+              const list = $("#inboxList");
+              if (list) list.innerHTML = '<div class="inbox-empty">Пока нет предложений — нажмите «💡 Предложить идею» и станьте первым!</div>';
+            }
+          }, 260);
+        }
+        toast("🗑 Предложение удалено");
+      } else {
+        delBtn.disabled = false;
+        toast("Не удалось удалить предложение" + (r.error ? ": " + r.error : ""));
+      }
+    } catch {
+      delBtn.disabled = false;
+      toast("Не удалось удалить предложение");
+    }
+  }
+});
+
+/* Вкладки: все / избранное (только админы видят вторую) */
+$$(".inbox-tab").forEach(t => t.addEventListener("click", () => {
+  clickSound(520);
+  inboxFilter = t.dataset.filter;
+  $$(".inbox-tab").forEach(x => x.classList.toggle("is-active", x === t));
+  loadSuggestions();
+}));
+
+/* Отправка идеи */
+$("#suggestSendBtn")?.addEventListener("click", async () => {
+  const btn = $("#suggestSendBtn"), st = $("#suggestStatus");
+  const message = $("#suggestMessage").value.trim();
+  if (!message) { if (st) st.textContent = "Введите текст идеи"; return; }
+  clickSound(700);
+  btn.disabled = true;
+  if (st) st.textContent = "Отправляем…";
+  try {
+    const res = await launcher.suggestCreate({ message });
+    if (res.ok) {
+      $("#suggestMessage").value = "";
+      updateSuggestCounter();
+      if (st) st.textContent = "✔ Идея отправлена — спасибо!";
+      toast("💡 Идея отправлена");
+      setTimeout(closeSuggestDialog, 900);
+      if (!$("#inboxDialog")?.classList.contains("is-hidden")) loadSuggestions();
+    } else {
+      if (st) st.textContent = "✖ " + (res.error || "Ошибка");
+    }
+  } catch (e) {
+    if (st) st.textContent = "✖ " + (e && e.message || "Ошибка отправки");
+  }
+  btn.disabled = false;
+});
+$("#suggestMessage")?.addEventListener("input", updateSuggestCounter);
+
+/* Кнопки и закрытие модалок (в т.ч. клик по фону — как у остальных диалогов) */
+$("#suggestBtn")?.addEventListener("click", openSuggestDialog);
+$("#inboxBtn")?.addEventListener("click", openInboxDialog);
+$("#suggestClose")?.addEventListener("click", closeSuggestDialog);
+$("#suggestCancelBtn")?.addEventListener("click", closeSuggestDialog);
+$("#suggestDialog")?.addEventListener("click", e => { if (e.target === e.currentTarget) closeSuggestDialog(); });
+$("#inboxClose")?.addEventListener("click", closeInboxDialog);
+$("#inboxRefreshBtn")?.addEventListener("click", () => { clickSound(600); loadSuggestions(); });
+$("#inboxDialog")?.addEventListener("click", e => { if (e.target === e.currentTarget) closeInboxDialog(); });
+
 $("#offLoginBtn")?.addEventListener("click", async () => {
   clickSound(640);
   const nick = $("#nickInput").value.trim() || "Steve";
@@ -1425,6 +1624,24 @@ function rotateNews() {
 }
 $("#newsCard").addEventListener("click", rotateNews);
 rotateNews(); setInterval(rotateNews, 7000);
+
+// Загрузка новостей сервера (news.json в репозитории epic-launcher-news):
+// карточка показывает их вместо статичного списка; авто-обновление каждые 5 минут.
+async function loadNews() {
+  let items = [];
+  try {
+    const bridge = window.launcher || window.api;
+    items = await bridge.getNews();
+  } catch {}
+  if (Array.isArray(items) && items.length) {
+    NEWS_SERVER = items;
+    rotateNews();
+  }
+  // при ошибке/пустом списке остаётся fallback-список NEWS
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadNews);
+else loadNews();
+setInterval(loadNews, 5 * 60 * 1000);
 
 /* ---------- Частицы фона ---------- */
 (function spawnParticles() {
@@ -1899,49 +2116,5 @@ window.addEventListener("beforeunload", () => {
     java: $("#javaSelect")?.value || "auto",
   }));
 });
-
-/* ---------- Новости сервера (плашка внизу окна) ---------- */
-let NEWS_ITEMS = [];
-let tickerIdx = 0, newsTimer = null;
-
-function showNextNews() {
-  const el = $("#news-content");
-  if (!el || !NEWS_ITEMS.length) return;
-  const n = NEWS_ITEMS[tickerIdx % NEWS_ITEMS.length];
-  tickerIdx++;
-  el.classList.add("is-switching");
-  setTimeout(() => {
-    el.textContent = `[${n.title || "Новость"}] ${n.text || ""}`.trim();
-    el.classList.remove("is-switching");
-  }, 250);
-}
-
-async function loadNews() {
-  const el = $("#news-content");
-  if (!el) return;
-  let items = [];
-  try {
-    const bridge = window.launcher || window.api;
-    items = await bridge.getNews();
-  } catch {}
-  if (Array.isArray(items) && items.length) {
-    const wasEmpty = !NEWS_ITEMS.length;
-    NEWS_ITEMS = items;
-    // Карточка в сайдбаре тоже показывает новости сервера (fallback — статичный список NEWS)
-    NEWS_SERVER = items;
-    rotateNews();
-    // показываем сразу при первой загрузке/после пустого списка, далее — ротация
-    if (!newsTimer || wasEmpty) { tickerIdx = 0; showNextNews(); }
-    if (!newsTimer) newsTimer = setInterval(showNextNews, 7000);
-  } else {
-    NEWS_ITEMS = [];
-    if (newsTimer) { clearInterval(newsTimer); newsTimer = null; }
-    el.textContent = "Свежих новостей пока нет.";
-  }
-}
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", loadNews);
-else loadNews();
-// подтягиваем свежие новости с сервера каждые 5 минут — плашки меняются без перезапуска
-setInterval(loadNews, 5 * 60 * 1000);
 
 console.log("%c⛏ EPIC LAUNCHER готов к приключениям!", "color:#ff7a29;font-size:16px;font-weight:bold");

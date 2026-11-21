@@ -58,12 +58,16 @@
       </nav>
 
       <div class="sidebar__footer">
+        <div class="feedback-buttons">
+          <button class="btn btn--ghost btn--sm" id="suggestBtn" title="Предложить идею для лаунчера">💡 Предложить идею</button>
+          <button class="btn btn--ghost btn--sm" id="inboxBtn" title="Ящик предложений с лайками">📬 Ящик предложений</button>
+        </div>
         <div class="news-card" id="newsCard">
           <div class="news-card__tag">НОВОСТИ</div>
           <div class="news-card__title" id="newsTitle">Minecraft 1.21 — Tricky Trials</div>
           <div class="news-card__dots" id="newsDots"></div>
         </div>
-        <div class="version-label">v1.0.9 • EPIC Launcher</div>
+        <div class="version-label">v1.1.0 • EPIC Launcher</div>
       </div>
     </aside>
 
@@ -525,11 +529,41 @@
   <!-- Тосты -->
   <div class="toasts" id="toasts"></div>
 
-  <!-- Плашка новостей сервера -->
-  <div id="news-ticker" class="news-ticker">
-    <div class="news-badge">📢 НОВОСТИ</div>
-    <div class="news-track">
-      <div id="news-content" class="news-text">Загрузка новостей...</div>
+  <!-- === Модалка: предложить идею === -->
+  <div class="instance-dialog is-hidden" id="suggestDialog">
+    <div class="instance-dialog__box card">
+      <div class="instance-dialog__head">
+        <b>💡 Предложить идею</b>
+        <button class="btn btn--ghost btn--sm" id="suggestClose">✕</button>
+      </div>
+      <div class="field">
+        <label class="field__label">Ваша идея <span class="suggest-counter" id="suggestCounter">0 / 500</span></label>
+        <textarea class="suggest-textarea" id="suggestMessage" maxlength="500" rows="5" placeholder="Что улучшить? Что добавить? (максимум 500 символов)" spellcheck="false"></textarea>
+      </div>
+      <div class="loaders__status" id="suggestStatus">Идея появится в «Ящике предложений».</div>
+      <div class="instance-dialog__foot">
+        <button class="btn btn--primary" id="suggestSendBtn">📨 Отправить</button>
+        <button class="btn btn--ghost" id="suggestCancelBtn">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- === Модалка: ящик предложений === -->
+  <div class="instance-dialog is-hidden" id="inboxDialog">
+    <div class="instance-dialog__box card inbox-box">
+      <div class="instance-dialog__head">
+        <b>📬 Ящик предложений</b>
+        <button class="btn btn--ghost btn--sm" id="inboxClose">✕</button>
+      </div>
+      <div class="inbox-tabs" id="inboxTabs">
+        <button class="inbox-tab is-active" data-filter="all">Все предложения</button>
+        <button class="inbox-tab is-hidden" data-filter="starred" id="inboxStarredTab">⭐ Избранное</button>
+      </div>
+      <div class="inbox-list" id="inboxList"></div>
+      <div class="loaders__status" id="inboxStatus">—</div>
+      <div class="instance-dialog__foot">
+        <button class="btn btn--ghost btn--sm" id="inboxRefreshBtn">🔄 Обновить</button>
+      </div>
     </div>
   </div>
 

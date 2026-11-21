@@ -70,11 +70,13 @@ async function apiFetch(pathname, { method = 'GET', body, token } = {}) {
   // Дружелюбные ошибки для UI: без внутренних деталей сервера.
   const err = new Error(
     res.status === 401 ? 'Неверный ник или пароль'
-      : res.status === 409 ? 'Ник уже занят'
-        : res.status === 400 ? (data.error || 'Некорректные данные')
-          : res.status === 429 ? 'Слишком много попыток — подождите немного'
-            : res.status >= 500 ? 'Сервер EPIC временно недоступен'
-              : (data.error || `Ошибка ${res.status}`)
+      : res.status === 403 ? (data.error === 'Admin only' ? 'Только для админов' : 'Недостаточно прав')
+        : res.status === 404 ? 'Не найдено'
+          : res.status === 409 ? 'Ник уже занят'
+            : res.status === 400 ? (data.error || 'Некорректные данные')
+              : res.status === 429 ? 'Слишком много попыток — подождите немного'
+                : res.status >= 500 ? 'Сервер EPIC временно недоступен'
+                  : (data.error || `Ошибка ${res.status}`)
   );
   err.status = res.status;
   throw err;
@@ -88,6 +90,7 @@ function accountFromUser(user, token) {
     id: String(user.id),
     nick: user.username,
     uuid: user.uuid,
+    isAdmin: user.isAdmin === true,
     token: token || null,
   };
 }
@@ -139,6 +142,47 @@ class EpicAuth {
     } catch (e) {
       return { ok: false, error: e.message };
     }
+  }
+
+  /* ------- Обратная связь: ящик предложений (все запросы с Bearer-токеном) ------- */
+
+  /** Отправить идею: message 1..500 символов. -> созданное предложение. */
+  async suggestionsCreate(token, message) {
+    if (!token) throw new Error('Войдите через EPIC account');
+    const text = String(message || '').trim();
+    if (!text) throw new Error('Введите текст идеи');
+    const data = await apiFetch('/api/suggestions', {
+      method: 'POST',
+      body: { message: text.slice(0, 500) },
+      token,
+    });
+    return data.suggestion || null;
+  }
+
+  /** Список предложений: filter 'all' | 'starred' (starred — только админы). */
+  async suggestionsList(token, filter = 'all') {
+    if (!token) throw new Error('Войдите через EPIC account');
+    const f = filter === 'starred' ? 'starred' : 'all';
+    const data = await apiFetch(`/api/suggestions?filter=${f}`, { token });
+    return data.suggestions || [];
+  }
+
+  /** Лайк/дизлайк (toggle): -> { likes, likedByMe }. */
+  async suggestionLike(token, id) {
+    if (!token) throw new Error('Войдите через EPIC account');
+    return apiFetch(`/api/suggestions/${encodeURIComponent(String(id))}/like`, { method: 'POST', token });
+  }
+
+  /** Звезда админа (toggle): -> { is_starred }. */
+  async suggestionStar(token, id) {
+    if (!token) throw new Error('Войдите через EPIC account');
+    return apiFetch(`/api/suggestions/${encodeURIComponent(String(id))}/star`, { method: 'POST', token });
+  }
+
+  /** Удалить предложение (только админы): -> { ok, deletedId }. */
+  async suggestionDelete(token, id) {
+    if (!token) throw new Error('Войдите через EPIC account');
+    return apiFetch(`/api/suggestions/${encodeURIComponent(String(id))}`, { method: 'DELETE', token });
   }
 }
 

@@ -350,8 +350,7 @@ body[data-bg="night"] .ground {
   grid-template-columns: 250px 1fr;
   height: 100vh;
   gap: 18px;
-  /* Отступ снизу под плашку новостей (40px + зазор), чтобы она не перекрывала кнопки */
-  padding: 18px 18px 56px;
+  padding: 18px;
 }
 
 /* ============ SIDEBAR ============ */
@@ -1085,35 +1084,69 @@ body:not(.mode-simple) .nav__item--mods { display: none; }
 .setting--stack .inst-ram-bar { max-width: none; }
 .inst-menu__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 
+/* ---------- Обратная связь: предложения (лайки + звёзды) ---------- */
+.feedback-buttons { display: flex; flex-direction: column; gap: 8px; padding: 0 4px 16px; }
+.feedback-buttons .btn { width: 100%; }
 
+.suggest-counter { float: right; color: var(--text-dim); font-weight: 400; font-size: 11px; }
+.suggest-textarea {
+  width: 100%; resize: vertical; min-height: 110px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line); border-radius: 12px;
+  color: var(--text); padding: 12px 14px;
+  font-family: inherit; font-size: 13.5px;
+}
+.suggest-textarea::placeholder { color: var(--text-dim); }
+.suggest-textarea:focus { outline: none; border-color: rgba(var(--accent-rgb), 0.55); }
 
-/* ---------- Плашка новостей сервера ---------- */
-.news-ticker {
-  position: absolute; bottom: 0; left: 0; width: 100%;
-  height: 40px;
-  display: flex; align-items: center; gap: 12px;
-  padding: 0 16px;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  color: #fff;
-  z-index: 55;
+.inbox-box { width: 100%; max-width: 560px; }
+.inbox-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.inbox-tab { padding: 7px 14px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--text-dim); border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); }
+.inbox-tab:hover { color: var(--text); }
+.inbox-tab.is-active { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: var(--on-accent); border-color: transparent; }
+
+.inbox-list {
+  display: flex; flex-direction: column; gap: 10px;
+  overflow-y: auto; max-height: 46vh; padding-right: 4px;
 }
-.news-badge {
-  flex: none;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--gold);
-  letter-spacing: 0.5px;
+.inbox-item {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 14px;
+  background: var(--glass-soft); border: 1px solid var(--line); border-radius: 14px;
 }
-.news-track { flex: 1; min-width: 0; overflow: hidden; }
-.news-text {
-  font-size: 13px;
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: opacity 0.25s ease;
+.inbox-item__head { display: flex; align-items: center; gap: 8px; }
+.inbox-item__author { font-weight: 700; font-size: 13px; color: var(--gold); word-break: break-word; }
+.inbox-item__starred { flex: none; font-size: 13px; filter: drop-shadow(0 0 6px rgba(var(--gold-rgb), 0.55)); }
+.inbox-item__date { margin-left: auto; flex: none; font-size: 11px; color: var(--text-dim); }
+.inbox-item__text { font-size: 13.5px; line-height: 1.45; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.inbox-item__actions { display: flex; align-items: center; gap: 8px; }
+
+.inbox-like {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 700; color: var(--text);
+  background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+  transition: all 0.15s;
 }
-.news-text.is-switching { opacity: 0; }
+.inbox-like:not(.is-liked) { filter: grayscale(1); opacity: 0.6; }
+.inbox-like.is-liked { border-color: rgba(var(--accent-rgb), 0.5); opacity: 1; }
+.inbox-like:not(.is-liked):hover { opacity: 1; }
+.inbox-like:disabled { opacity: 0.4; cursor: wait; }
+.inbox-star {
+  flex: none; padding: 5px 10px; border-radius: 999px; font-size: 13px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+  color: var(--text-dim); transition: all 0.15s;
+}
+.inbox-star.is-starred { color: var(--gold); border-color: rgba(var(--gold-rgb), 0.5); text-shadow: 0 0 10px rgba(var(--gold-rgb), 0.6); }
+.inbox-star:disabled { opacity: 0.4; cursor: wait; }
+.inbox-del {
+  flex: none; margin-left: auto;
+  padding: 5px 10px; border-radius: 999px; font-size: 13px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line);
+  color: var(--text-dim); transition: all 0.15s;
+}
+.inbox-del:hover { color: var(--danger); border-color: rgba(255, 82, 82, 0.5); }
+.inbox-del:disabled { opacity: 0.4; cursor: wait; }
+.inbox-item.is-deleted { opacity: 0; transform: translateX(14px); transition: opacity 0.25s ease, transform 0.25s ease; }
+.inbox-empty { padding: 26px 10px; text-align: center; color: var(--text-dim); font-size: 13px; }
+

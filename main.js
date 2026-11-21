@@ -176,6 +176,71 @@ ipcMain.handle('account:get', async () => {
 
 ipcMain.handle('account:logout', async () => { auth.holder.clear(); return { ok: true }; });
 
+/* ---------------- Обратная связь (ящик предложений) ---------------- */
+
+// Токен EPIC-аккаунта из хранилища. Без входа через EPIC — понятная ошибка
+// для UI (оффлайн-аккаунт suggestions не поддерживает).
+function epicToken() {
+  const stored = auth.holder.load();
+  if (!stored || stored.type !== 'epic' || !stored.token) {
+    throw new Error('Войдите через EPIC account');
+  }
+  return stored.token;
+}
+
+// Создать идею: { message } -> { ok, suggestion | error }
+ipcMain.handle('suggestions:create', async (_e, { message } = {}) => {
+  try {
+    const token = epicToken();
+    return { ok: true, suggestion: await epicAuth.suggestionsCreate(token, message) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Список: { filter: 'all' | 'starred' } -> { ok, suggestions | error }
+ipcMain.handle('suggestions:list', async (_e, { filter } = {}) => {
+  try {
+    const token = epicToken();
+    return { ok: true, suggestions: await epicAuth.suggestionsList(token, filter) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Лайк (toggle): { id } -> { ok, likes, likedByMe | error }
+ipcMain.handle('suggestions:like', async (_e, { id } = {}) => {
+  try {
+    const token = epicToken();
+    const r = await epicAuth.suggestionLike(token, id);
+    return { ok: true, likes: r.likes, likedByMe: r.likedByMe };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Звезда админа (toggle): { id } -> { ok, is_starred | error }
+ipcMain.handle('suggestions:star', async (_e, { id } = {}) => {
+  try {
+    const token = epicToken();
+    const r = await epicAuth.suggestionStar(token, id);
+    return { ok: true, is_starred: r.is_starred };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Удалить предложение (только админы на сервере): { id } -> { ok | error }
+ipcMain.handle('delete-suggestion', async (_e, { id } = {}) => {
+  try {
+    const token = epicToken();
+    await epicAuth.suggestionDelete(token, id);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // Новости сервера: GET по NEWS_URL через smartFetch (работает через системный
 // прокси). Возвращает массив [{ title, text }, ...]; любая ошибка (нет сети,
 // 404, прокси заблокировал) -> [], чтобы лаунчер не падал.
@@ -714,5 +779,6 @@ function friendlyMsError(e) {
 
 function publicAccount(a) {
   if (!a) return null;
-  return { type: a.type, nick: a.nick, uuid: a.uuid, skins: a.skins || [], capes: a.capes || [] };
+  // isAdmin — вкладка «⭐ Избранное» и звёзды в ящике предложений.
+  return { type: a.type, nick: a.nick, uuid: a.uuid, isAdmin: a.isAdmin === true, skins: a.skins || [], capes: a.capes || [] };
 }
