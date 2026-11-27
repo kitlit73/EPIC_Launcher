@@ -61,6 +61,7 @@
         <div class="feedback-buttons">
           <button class="btn btn--ghost btn--sm" id="suggestBtn" title="Предложить идею для лаунчера">💡 Предложить идею</button>
           <button class="btn btn--ghost btn--sm" id="inboxBtn" title="Ящик предложений с лайками">📬 Ящик предложений</button>
+          <button class="btn btn--ghost btn--sm is-hidden" id="usersBtn" title="Список пользователей (только для админов)">👥 Пользователи</button>
         </div>
         <div class="news-card" id="newsCard">
           <div class="news-card__tag">НОВОСТИ</div>
@@ -563,6 +564,21 @@
       <div class="loaders__status" id="inboxStatus">—</div>
       <div class="instance-dialog__foot">
         <button class="btn btn--ghost btn--sm" id="inboxRefreshBtn">🔄 Обновить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- === Модалка: список пользователей (только админы) === -->
+  <div class="instance-dialog is-hidden" id="usersDialog">
+    <div class="instance-dialog__box card inbox-box">
+      <div class="instance-dialog__head">
+        <b>👥 Пользователи</b>
+        <button class="btn btn--ghost btn--sm" id="usersClose">✕</button>
+      </div>
+      <div class="inbox-list" id="usersList"></div>
+      <div class="loaders__status" id="usersStatus">—</div>
+      <div class="instance-dialog__foot">
+        <button class="btn btn--ghost btn--sm" id="usersRefreshBtn">🔄 Обновить</button>
       </div>
     </div>
   </div>

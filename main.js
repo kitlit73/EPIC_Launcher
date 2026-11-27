@@ -241,12 +241,23 @@ ipcMain.handle('delete-suggestion', async (_e, { id } = {}) => {
   }
 });
 
+// Список пользователей (админ-права проверяет сервер): -> { ok, users | error }
+ipcMain.handle('users:list', async () => {
+  try {
+    const token = epicToken();
+    return { ok: true, users: await epicAuth.usersList(token) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // Новости сервера: GET по NEWS_URL через smartFetch (работает через системный
-// прокси). Возвращает массив [{ title, text }, ...]; любая ошибка (нет сети,
-// 404, прокси заблокировал) -> [], чтобы лаунчер не падал.
+// прокси). ?t=... ломает кеш CDN raw.githubusercontent (max-age=300), иначе
+// свежие новости видны только через ~5 минут. Возвращает массив
+// [{ title, text }, ...]; любая ошибка (нет сети, 404, прокси) -> [].
 ipcMain.handle('get-news', async () => {
   try {
-    const res = await smartFetch(NEWS_URL, { headers: { 'Cache-Control': 'no-cache' } });
+    const res = await smartFetch(`${NEWS_URL}?t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache' } });
     if (!res.ok) return [];
     const data = await res.json();
     const list = Array.isArray(data) ? data : (data && Array.isArray(data.news)) ? data.news : [];

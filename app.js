@@ -1047,6 +1047,8 @@ function renderAccount() {
     $("#offLoginBtn").classList.remove("is-hidden");
     $("#msLoginBtn").classList.remove("is-hidden");
   }
+  // «👥 Пользователи» — только для вошедших админов (права ещё раз проверяет сервер)
+  $("#usersBtn")?.classList.toggle("is-hidden", !(account && account.type === "epic" && account.isAdmin));
   // Ссылка на чип в топбаре
   refreshIdentity();
 }
@@ -1293,6 +1295,59 @@ $("#suggestDialog")?.addEventListener("click", e => { if (e.target === e.current
 $("#inboxClose")?.addEventListener("click", closeInboxDialog);
 $("#inboxRefreshBtn")?.addEventListener("click", () => { clickSound(600); loadSuggestions(); });
 $("#inboxDialog")?.addEventListener("click", e => { if (e.target === e.currentTarget) closeInboxDialog(); });
+
+/* ---------- Пользователи (только админы): имена + дата регистрации ---------- */
+function openUsersDialog() {
+  clickSound(560);
+  if (!window.launcher) return toast("⚠ Доступно в десктопной версии");
+  if (!isAdminUser()) return; // кнопка и так скрыта у не-админов — страховка
+  $("#usersDialog")?.classList.remove("is-hidden");
+  loadUsers();
+}
+function closeUsersDialog() { $("#usersDialog")?.classList.add("is-hidden"); }
+
+async function loadUsers() {
+  const list = $("#usersList"), st = $("#usersStatus");
+  if (st) st.textContent = "Загружаем список…";
+  if (list) list.innerHTML = "";
+  try {
+    const res = await launcher.usersList();
+    if (!res.ok) { if (st) st.textContent = "✖ " + (res.error || "Ошибка"); return; }
+    renderUsers(res.users || []);
+    if (st) st.textContent = `Пользователей: ${(res.users || []).length} (только имена и дата регистрации — без паролей)`;
+  } catch (e) {
+    if (st) st.textContent = "✖ " + (e && e.message || "Ошибка загрузки");
+  }
+}
+
+function fmtUsersDate(d) {
+  try {
+    return new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch { return ""; }
+}
+
+function renderUsers(users) {
+  const list = $("#usersList");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!users.length) {
+    list.innerHTML = '<div class="inbox-empty">Пользователей пока нет.</div>';
+    return;
+  }
+  for (const u of users) {
+    const el = document.createElement("div");
+    el.className = "users-item";
+    el.innerHTML = `
+      <span class="users-item__name">${esc(u.username)}${u.isAdmin ? '<span class="users-item__badge" title="Пользователь — администратор">👑 АДМИН</span>' : ""}</span>
+      <span class="users-item__date">${esc(fmtUsersDate(u.created_at))}</span>`;
+    list.appendChild(el);
+  }
+}
+
+$("#usersBtn")?.addEventListener("click", openUsersDialog);
+$("#usersClose")?.addEventListener("click", closeUsersDialog);
+$("#usersRefreshBtn")?.addEventListener("click", () => { clickSound(600); loadUsers(); });
+$("#usersDialog")?.addEventListener("click", e => { if (e.target === e.currentTarget) closeUsersDialog(); });
 
 $("#offLoginBtn")?.addEventListener("click", async () => {
   clickSound(640);
@@ -1635,7 +1690,8 @@ async function loadNews() {
     items = await bridge.getNews();
   } catch {}
   if (Array.isArray(items) && items.length) {
-    NEWS_SERVER = items;
+    // Крутим максимум 4 новости — если в news.json их больше, лишние не показываем.
+    NEWS_SERVER = items.slice(0, 4);
     rotateNews();
   }
   // при ошибке/пустом списке остаётся fallback-список NEWS

@@ -184,6 +184,13 @@ class EpicAuth {
     if (!token) throw new Error('Войдите через EPIC account');
     return apiFetch(`/api/suggestions/${encodeURIComponent(String(id))}`, { method: 'DELETE', token });
   }
+
+  /** Список пользователей (только админы, проверка на сервере): -> [{ id, username, created_at }]. */
+  async usersList(token) {
+    if (!token) throw new Error('Войдите через EPIC account');
+    const data = await apiFetch('/api/users', { token });
+    return data.users || [];
+  }
 }
 
 module.exports = { EpicAuth, API_URL };
