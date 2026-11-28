@@ -178,15 +178,35 @@ ipcMain.handle('account:logout', async () => { auth.holder.clear(); return { ok:
 
 /* ---------------- Обратная связь (ящик предложений) ---------------- */
 
-// Токен EPIC-аккаунта из хранилища. Без входа через EPIC — понятная ошибка
-// для UI (оффлайн-аккаунт suggestions не поддерживает).
+// Токен EPIC-аккаунта из хранилища. Профили: EPIC-сессия хранится отдельно,
+// поэтому suggestions/users работают даже когда активен оффлайн-профиль.
 function epicToken() {
+  const epic = auth.holder.getEpicAccount();
+  if (epic && epic.token) return epic.token;
   const stored = auth.holder.load();
-  if (!stored || stored.type !== 'epic' || !stored.token) {
-    throw new Error('Войдите через EPIC account');
-  }
-  return stored.token;
+  if (stored && stored.type === 'epic' && stored.token) return stored.token;
+  throw new Error('Войдите через EPIC account');
 }
+
+// Профили для переключателя: { ok, profiles: [{type, nick, isAdmin}], activeNick }
+ipcMain.handle('account:profiles', async () => {
+  try {
+    const { profiles, activeNick } = auth.holder.listProfiles();
+    return { ok: true, profiles, activeNick };
+  } catch (e) {
+    return { ok: false, error: e.message, profiles: [], activeNick: null };
+  }
+});
+
+// Переключить профиль по нику (EPIC — активирует сохранённую сессию, без логина)
+ipcMain.handle('account:switch', async (_e, { nick } = {}) => {
+  try {
+    const a = auth.holder.switchTo(nick);
+    return { ok: true, account: publicAccount(a) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
 
 // Создать идею: { message } -> { ok, suggestion | error }
 ipcMain.handle('suggestions:create', async (_e, { message } = {}) => {

@@ -132,6 +132,62 @@ function mergeInherit(parent, child) {
   };
 }
 
+/**
+ * Дедупликация библиотек по ключу group:artifact[:classifier].
+ *
+ * Наследование манифестов (inheritsFrom / mainConfig) приносит одну и ту же
+ * библиотеку в разных версиях: например org.ow2.asm:asm 9.6 из ванильного
+ * 1.21.4 и 9.10.1 из Fabric Loader. После простой конкатенации обе попадали
+ * в classpath, и Fabric Loader падал с
+ * "duplicate ASM classes found on classpath" (LoaderUtil.verifyClasspath).
+ *
+ * Оставляем ОДНУ запись с максимальной версией (сравнение покомпонентное,
+ * число-осознанное: 9.10.1 > 9.6). При равных версиях предпочитаем запись с
+ * downloads.artifact (там есть sha1/size с piston-meta), иначе — последнюю
+ * (дочерний манифест перекрывает родительский).
+ *
+ * Classifiers (например, asm:asm:9.6 vs asm:asm:9.6:natives) — это разные
+ * артефакты: ключ включает classifier, между собой они не дедуплицируются.
+ */
+function libKey(name) {
+  const base = String(name).split('@')[0];
+  const parts = base.split(':');
+  const key = parts.slice(0, 2).join(':');
+  return parts.length > 3 ? `${key}:${parts[3]}` : key;
+}
+
+function compareVersions(a, b) {
+  const pa = String(a).split(/[.\-_+]/), pb = String(b).split(/[.\-_+]/);
+  const n = Math.max(pa.length, pb.length);
+  for (let i = 0; i < n; i++) {
+    const x = pa[i] || '0', y = pb[i] || '0';
+    if (/^\d+$/.test(x) && /^\d+$/.test(y)) {
+      const d = parseInt(x, 10) - parseInt(y, 10);
+      if (d) return d;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+function dedupeLibraries(libs) {
+  const byKey = new Map();
+  const out = [];
+  for (const lib of libs || []) {
+    if (!lib || !lib.name) continue;
+    const key = libKey(lib.name);
+    const prev = byKey.get(key);
+    if (!prev) { byKey.set(key, lib); out.push(lib); continue; }
+    const cmp = compareVersions(String(lib.name).split(':')[2], String(prev.name).split(':')[2]);
+    if (cmp > 0 || (cmp === 0 && !prev.downloads && !!lib.downloads)) {
+      byKey.set(key, lib);
+      out[out.indexOf(prev)] = lib;
+    }
+  }
+  return out;
+}
+
 async function normalizeSpec(m, features) {
   if (m.mainConfig && typeof m.mainConfig === 'object' && m.mainConfig.url) {
     const cfg = await fetchJson(m.mainConfig.url);
@@ -141,7 +197,8 @@ async function normalizeSpec(m, features) {
   const osName = platformName();
   const arch = process.arch === 'arm64' ? 'arm64' : 'x86';
 
-  const libraries = (m.libraries || [])
+  // Дедупликация ПОСЛЕ всех слияний (inheritsFrom + mainConfig) — единый узел.
+  const libraries = dedupeLibraries(m.libraries || [])
     .filter(lib => allowByRules(lib.rules, osName, arch, features))
     .map(lib => parseLibrary(lib, osName, arch))
     .filter(Boolean);
@@ -288,4 +345,4 @@ function parseLibrary(lib, osName, arch) {
   return entry;
 }
 
-module.exports = { fetchJson, getVersionList, resolveManifest, buildSpec, buildSpecFromFile, coordToPath, platformName, setVersionCacheFile };
+module.exports = { fetchJson, getVersionList, resolveManifest, buildSpec, buildSpecFromFile, coordToPath, platformName, setVersionCacheFile, dedupeLibraries, compareVersions, libKey };

@@ -35,7 +35,12 @@ async function jsonFetch(url, opts = {}) {
 }
 
 class Auth {
-  constructor(dir) { this.file = path.join(dir, 'auth.json'); }
+  constructor(dir) {
+    this.file = path.join(dir, 'auth.json');
+    // Профили: EPIC-сессия живёт отдельно от активного аккаунта — можно
+    // переключаться на оффлайн-ники и обратно, не выходя из EPIC account.
+    this.profilesFile = path.join(dir, 'profiles.json');
+  }
 
   load() {
     try {
@@ -46,9 +51,76 @@ class Auth {
 
   save(a) {
     fs.writeFileSync(this.file, JSON.stringify(this.encryptToken({ ...a }), null, 2));
+    // Побочно ведём журнал профилей: EPIC-сессия + недавние оффлайн-ники.
+    try {
+      const p = this.loadProfiles();
+      if (a.type === 'epic') p.epic = this.encryptToken({ ...a });
+      if (a.type === 'offline') {
+        p.nicks = [a.nick, ...p.nicks.filter(n => n.toLowerCase() !== String(a.nick).toLowerCase())].slice(0, 6);
+      }
+      fs.writeFileSync(this.profilesFile, JSON.stringify(p, null, 2));
+    } catch (e) {
+      console.warn('[auth] profiles save failed:', e.message);
+    }
   }
 
-  clear() { try { fs.unlinkSync(this.file); } catch {} }
+  /** Профили: { epic: Account|null, nicks: string[] }. Ленивая миграция —
+   *  если profiles.json ещё нет, а в auth.json лежит EPIC-аккаунт, берём его. */
+  loadProfiles() {
+    let p = { epic: null, nicks: [] };
+    try { p = { ...p, ...JSON.parse(fs.readFileSync(this.profilesFile, 'utf8')) }; } catch {}
+    if (p.epic) p.epic = this.decryptToken(p.epic);
+    if (!p.epic) {
+      const active = this.load();
+      if (active && active.type === 'epic') {
+        p.epic = active;
+        try {
+          fs.writeFileSync(this.profilesFile, JSON.stringify({ epic: this.encryptToken({ ...active }), nicks: p.nicks }, null, 2));
+        } catch {}
+      }
+    }
+    return p;
+  }
+
+  /** EPIC-сессия (даже если активен оффлайн-профиль). */
+  getEpicAccount() {
+    const p = this.loadProfiles();
+    if (p.epic && p.epic.type === 'epic' && p.epic.token) return p.epic;
+    return null;
+  }
+
+  /** Список профилей для переключателя: EPIC (если есть) + оффлайн-ники. */
+  listProfiles() {
+    const p = this.loadProfiles();
+    const active = this.load();
+    const profiles = [];
+    if (p.epic) profiles.push({ type: 'epic', nick: p.epic.nick, isAdmin: p.epic.isAdmin === true });
+    for (const n of p.nicks) {
+      if (profiles.some(x => x.nick.toLowerCase() === String(n).toLowerCase())) continue;
+      profiles.push({ type: 'offline', nick: n });
+    }
+    if (active && !profiles.some(x => x.nick.toLowerCase() === String(active.nick).toLowerCase())) {
+      profiles.push({ type: active.type, nick: active.nick, isAdmin: active.isAdmin === true });
+    }
+    return { profiles, activeNick: active ? active.nick : null };
+  }
+
+  /** Переключить активный профиль по нику (EPIC — активирует сохранённую сессию). */
+  switchTo(nick) {
+    const target = String(nick || '').trim();
+    if (!target) throw new Error('Укажите ник профиля');
+    const epic = this.getEpicAccount();
+    if (epic && epic.nick.toLowerCase() === target.toLowerCase()) {
+      this.save(epic);
+      return epic;
+    }
+    return this.offline(target);
+  }
+
+  clear() {
+    try { fs.unlinkSync(this.file); } catch {}
+    try { fs.unlinkSync(this.profilesFile); } catch {}
+  }
 
   /** EPIC-токен хранится ТОЛЬКО зашифрованным (safeStorage/DPAPI на Windows). */
   encryptToken(a) {

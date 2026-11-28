@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('launcher', {
   suggestionStar: (o) => ipcRenderer.invoke('suggestions:star', o),
   deleteSuggestion: (id) => ipcRenderer.invoke('delete-suggestion', { id }),
   usersList: () => ipcRenderer.invoke('users:list'),
+  profilesList: () => ipcRenderer.invoke('account:profiles'),
+  switchProfile: (nick) => ipcRenderer.invoke('account:switch', { nick }),
   getAccount: () => ipcRenderer.invoke('account:get'),
   logout: () => ipcRenderer.invoke('account:logout'),
   launch: (opts) => ipcRenderer.invoke('game:launch', opts),

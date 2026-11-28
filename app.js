@@ -1049,6 +1049,19 @@ function renderAccount() {
   }
   // «👥 Пользователи» — только для вошедших админов (права ещё раз проверяет сервер)
   $("#usersBtn")?.classList.toggle("is-hidden", !(account && account.type === "epic" && account.isAdmin));
+  // «🔄 Сменить профиль» — видна, когда есть EPIC-сессия или ≥2 профиля;
+  // при единственном EPIC-профиле клик создаёт оффлайн-профиль из ника в поле.
+  (async () => {
+    try {
+      if (!window.launcher || !account) return void $("#switchProfileBtn")?.classList.add("is-hidden");
+      const res = await launcher.profilesList();
+      const list = (res && res.ok) ? res.profiles : [];
+      const hasEpic = list.some(p => p.type === "epic");
+      $("#switchProfileBtn")?.classList.toggle("is-hidden", !(list.length >= 2 || hasEpic));
+    } catch {
+      $("#switchProfileBtn")?.classList.add("is-hidden");
+    }
+  })();
   // Ссылка на чип в топбаре
   refreshIdentity();
 }
@@ -1348,6 +1361,48 @@ $("#usersBtn")?.addEventListener("click", openUsersDialog);
 $("#usersClose")?.addEventListener("click", closeUsersDialog);
 $("#usersRefreshBtn")?.addEventListener("click", () => { clickSound(600); loadUsers(); });
 $("#usersDialog")?.addEventListener("click", e => { if (e.target === e.currentTarget) closeUsersDialog(); });
+
+/* ---------- Переключение профилей одной кнопкой (EPIC ↔ оффлайн-ники) ---------- */
+$("#switchProfileBtn")?.addEventListener("click", async () => {
+  if (!window.launcher) return toast("⚠ Доступно в десктопной версии");
+  clickSound(620);
+  try {
+    const res = await launcher.profilesList();
+    if (!res.ok) return toast("✖ " + (res.error || "Ошибка"));
+    const profiles = res.profiles || [];
+    // Единственный профиль (только EPIC): создаём оффлайн-профиль из ника в поле
+    if (profiles.length < 2) {
+      if (!profiles.some(p => p.type === "epic")) {
+        return toast("⚠ Сначала войдите в EPIC account — сессия сохранится при переключениях");
+      }
+      const nick = ($("#nickInput")?.value || "").trim();
+      if (!nick || nick.toLowerCase() === String(res.activeNick || "").toLowerCase()) {
+        return toast("⚠ Введите другой ник в поле выше и нажмите «Сменить профиль» ещё раз");
+      }
+      const sw = await launcher.switchProfile(nick);
+      if (sw.ok) {
+        account = sw.account;
+        renderAccount();
+        toast(`👤 Профиль: ${sw.account.nick} (оффлайн) — EPIC-сессия сохранена`);
+      } else {
+        toast("✖ " + (sw.error || "Не удалось переключить профиль"));
+      }
+      return;
+    }
+    const idx = profiles.findIndex(p => p.nick === (account && account.nick));
+    const next = profiles[(idx + 1 + profiles.length) % profiles.length];
+    const sw = await launcher.switchProfile(next.nick);
+    if (sw.ok) {
+      account = sw.account;
+      renderAccount();
+      toast(`👤 Профиль: ${sw.account.nick} (${sw.account.type === "epic" ? "EPIC account" : "оффлайн"})`);
+    } else {
+      toast("✖ " + (sw.error || "Не удалось переключить профиль"));
+    }
+  } catch (e) {
+    toast("✖ " + (e && e.message || "Ошибка переключения"));
+  }
+});
 
 $("#offLoginBtn")?.addEventListener("click", async () => {
   clickSound(640);
