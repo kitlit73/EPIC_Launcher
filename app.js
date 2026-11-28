@@ -1443,7 +1443,74 @@ async function restoreAccount() {
     if (account && account.type === "microsoft") account = { type: "offline", nick: account.nick };
     if (account) renderAccount();
   } catch {}
+  // Автовход: включён в настройках + нет активного EPIC-аккаунта ->
+  // авто-регистрация (если нужно) и авто-логин.
+  try {
+    const cfg = await launcher.autoLoginRead();
+    const needLogin = cfg && cfg.ok && cfg.enabled && cfg.username && cfg.password
+      && (!account || account.type !== "epic");
+    if (needLogin) {
+      toast("🤖 Автовход…");
+      const res = await launcher.autoLoginRun();
+      if (res.ok) {
+        account = res.account;
+        renderAccount();
+        toast("✔ Автовход: " + account.nick);
+      } else {
+        toast("✖ Автовход не удался: " + (res.error || "ошибка"));
+      }
+    }
+  } catch {}
 }
+
+/* ---------- Автовход (настройки: переключатель + ник + пароль точками) ---------- */
+let autoLoginSaveTimer = null;
+
+function scheduleAutoLoginSave() {
+  clearTimeout(autoLoginSaveTimer);
+  autoLoginSaveTimer = setTimeout(saveAutoLoginNow, 700);
+}
+
+async function saveAutoLoginNow() {
+  if (!window.launcher) return;
+  const cfg = {
+    enabled: !!$("#autoLoginToggle")?.checked,
+    username: ($("#autoLoginNick")?.value || "").trim(),
+    password: $("#autoLoginPass")?.value || "",
+  };
+  const res = await launcher.autoLoginSave(cfg);
+  const st = $("#autoLoginStatus");
+  if (st) st.textContent = res.ok
+    ? (cfg.enabled && cfg.username && cfg.password ? "✔ Сохранено — при старте выполнится автовход." : "Сохранено. Для автовхода заполните ник и пароль.")
+    : "✖ " + (res.error || "Ошибка сохранения");
+}
+
+function initAutoLoginUI() {
+  const toggle = $("#autoLoginToggle"), fields = $("#autoLoginFields");
+  if (!toggle || !fields) return;
+  toggle.addEventListener("change", () => {
+    clickSound(600);
+    fields.classList.toggle("is-hidden", !toggle.checked);
+    scheduleAutoLoginSave();
+  });
+  $("#autoLoginNick")?.addEventListener("input", scheduleAutoLoginSave);
+  $("#autoLoginPass")?.addEventListener("input", scheduleAutoLoginSave);
+  (async () => {
+    try {
+      const cfg = await launcher.autoLoginRead();
+      if (!cfg || !cfg.ok) return;
+      toggle.checked = !!cfg.enabled;
+      fields.classList.toggle("is-hidden", !cfg.enabled);
+      if (cfg.username) $("#autoLoginNick").value = cfg.username;
+      if (cfg.password) $("#autoLoginPass").value = cfg.password;
+      const st = $("#autoLoginStatus");
+      if (st) st.textContent = cfg.enabled
+        ? (cfg.username && cfg.password ? "✔ Автовход включён." : "Заполните ник и пароль.")
+        : "Введите ник и пароль — сохранятся автоматически.";
+    } catch {}
+  })();
+}
+initAutoLoginUI();
 
 /* ---------- RAM слайдер ---------- */
 const ramSlider = $("#ramSlider");

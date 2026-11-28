@@ -36,10 +36,47 @@ async function jsonFetch(url, opts = {}) {
 
 class Auth {
   constructor(dir) {
+    this.dir = dir;
     this.file = path.join(dir, 'auth.json');
     // Профили: EPIC-сессия живёт отдельно от активного аккаунта — можно
     // переключаться на оффлайн-ники и обратно, не выходя из EPIC account.
     this.profilesFile = path.join(dir, 'profiles.json');
+    // Настройки автовхода: пароль — только зашифрованным (safeStorage/DPAPI).
+    this.autoLoginFile = path.join(dir, 'autologin.json');
+  }
+
+  /** Настройки автовхода: { enabled, username, password }. Пароль расшифровывается
+   *  только в main-процессе; при недоступном safeStorage — fallback открытым текстом. */
+  readAutoLogin() {
+    const empty = { enabled: false, username: '', password: '' };
+    try {
+      const d = JSON.parse(fs.readFileSync(this.autoLoginFile, 'utf8'));
+      let password = '';
+      if (d.passwordEnc) {
+        if (safeStorage && safeStorage.isEncryptionAvailable && safeStorage.isEncryptionAvailable()) {
+          try { password = safeStorage.decryptString(Buffer.from(d.passwordEnc, 'base64')); } catch {}
+        }
+      } else if (typeof d.password === 'string') {
+        password = d.password;
+      }
+      return { enabled: !!d.enabled, username: d.username || '', password };
+    } catch { return empty; }
+  }
+
+  writeAutoLogin(cfg) {
+    const d = { enabled: !!cfg.enabled, username: String(cfg.username || '') };
+    if (cfg.password) {
+      if (safeStorage && safeStorage.isEncryptionAvailable && safeStorage.isEncryptionAvailable()) {
+        try {
+          d.passwordEnc = safeStorage.encryptString(String(cfg.password)).toString('base64');
+        } catch {
+          d.password = String(cfg.password);
+        }
+      } else {
+        d.password = String(cfg.password);
+      }
+    }
+    fs.writeFileSync(this.autoLoginFile, JSON.stringify(d, null, 2));
   }
 
   load() {

@@ -271,6 +271,45 @@ ipcMain.handle('users:list', async () => {
   }
 });
 
+/* ---------------- Автовход (авто-регистрация + авто-логин) ---------------- */
+
+// Прочитать настройки автовхода: -> { ok, enabled, username, password }
+ipcMain.handle('autologin:read', async () => {
+  try {
+    const cfg = auth.holder.readAutoLogin();
+    return { ok: true, ...cfg };
+  } catch (e) {
+    return { ok: false, enabled: false, username: '', password: '', error: e.message };
+  }
+});
+
+// Сохранить настройки: { enabled, username, password } (пароль шифруется safeStorage)
+ipcMain.handle('autologin:save', async (_e, cfg = {}) => {
+  try {
+    auth.holder.writeAutoLogin(cfg);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Выполнить автовход: авто-регистрация (если ник занят — просто логин) -> авто-логин
+ipcMain.handle('autologin:run', async () => {
+  try {
+    const cfg = auth.holder.readAutoLogin();
+    if (!cfg.enabled || !cfg.username || !cfg.password) {
+      return { ok: false, error: 'Автовход выключен или данные не заполнены' };
+    }
+    const creds = { username: cfg.username, password: cfg.password };
+    try { await epicAuth.register(creds); } catch { /* ник занят/ошибки формата — пробуем логин */ }
+    const a = await epicAuth.login(creds);
+    auth.holder.save(a);
+    return { ok: true, account: publicAccount(a) };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // Новости сервера: GET по NEWS_URL через smartFetch (работает через системный
 // прокси). ?t=... ломает кеш CDN raw.githubusercontent (max-age=300), иначе
 // свежие новости видны только через ~5 минут. Возвращает массив

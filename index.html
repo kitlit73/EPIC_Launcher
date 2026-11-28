@@ -68,7 +68,7 @@
           <div class="news-card__title" id="newsTitle">Minecraft 1.21 — Tricky Trials</div>
           <div class="news-card__dots" id="newsDots"></div>
         </div>
-        <div class="version-label">v1.1.3 • EPIC Launcher</div>
+        <div class="version-label">v1.1.4 • EPIC Launcher</div>
       </div>
     </aside>
 
@@ -399,6 +399,17 @@
               <button class="btn btn--ghost btn--sm" id="offLoginBtn">⚡ Оффлайн-режим</button>
               <button class="btn btn--ghost btn--sm is-hidden" id="switchProfileBtn" title="Переключить профиль одним кликом (EPIC ↔ оффлайн-аккаунты)">🔄 Сменить профиль</button>
               <button class="btn btn--ghost btn--sm is-hidden" id="logoutBtn">Выйти</button>
+            </div>
+            <div class="autologin-box">
+              <label class="autologin-row" title="Автоматическая регистрация и вход при запуске лаунчера">
+                <input type="checkbox" id="autoLoginToggle"/>
+                <span>🤖 Автовход — авто-регистрация и вход при старте</span>
+              </label>
+              <div class="autologin-fields is-hidden" id="autoLoginFields">
+                <input class="input input--jvm" id="autoLoginNick" placeholder="Ник EPIC account" maxlength="16" spellcheck="false"/>
+                <input class="input input--jvm" id="autoLoginPass" type="password" placeholder="Пароль (скрыт точками)" maxlength="128" spellcheck="false" autocomplete="new-password"/>
+                <div class="loaders__status" id="autoLoginStatus">Введите ник и пароль — сохранятся автоматически.</div>
+              </div>
             </div>
           </div>
           <div class="field">

@@ -1168,3 +1168,23 @@ body:not(.mode-simple) .nav__item--mods { display: none; }
 }
 .users-item__date { margin-left: auto; flex: none; font-size: 11.5px; color: var(--text-dim); }
 
+/* ---------- Автовход (авто-регистрация + авто-логин) ---------- */
+.autologin-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.autologin-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 600; color: var(--text);
+  cursor: pointer; user-select: none;
+}
+.autologin-row input[type="checkbox"] { accent-color: var(--green); width: 15px; height: 15px; cursor: pointer; }
+.autologin-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.autologin-fields .input { width: 100%; }
+.autologin-fields input[type="password"] {
+  -webkit-text-security: disc;   /* точки вместо символов */
+  letter-spacing: 2px;
+}
+
